@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
-use illuminate\Support\Facades\Hash;
-use illuminate\Validation\ValidationException;
-use illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Auth;
 
 
 class AuthController extends Controller
@@ -28,7 +28,8 @@ class AuthController extends Controller
                 'first_name' => $request->firstname,
                 'last_name' => $request->lastname,
                 'email'=> $request->email,
-                'password'=> Hash::make($request->password),
+                'password' => Hash::make($request->password),
+
             ]);
 
             $token = $user->createToken('auth_token')->plainTextToken;
