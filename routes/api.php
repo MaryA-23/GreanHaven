@@ -45,4 +45,6 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
       // Requests
       Route::post('vegetables/{id}/request', [VegetableRequestController::class, 'store']);
       Route::post('vegetables/{id}/fulfill', [VegetableRequestController::class, 'fulfill']);
+      Route::get('vegetables/{id}/request-status', [VegetableRequestController::class, 'status']);
+
   });

@@ -56,6 +56,27 @@ class VegetableRequestController extends Controller
     ]);
     }
 
+    public function status(int $vegetableId): JsonResponse
+    {
+        $vegRequest = VegetableRequest::where('vegetable_id', $vegetableId)
+            ->latest() // get the most recent request
+            ->first();
+
+        if (!$vegRequest) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No request has been made for this vegetable yet.',
+                'data' => null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Current request status: {$vegRequest->status}",
+            'data' => $vegRequest,
+        ]);
+    }
+
 
     /**
      * Fulfill a customer's request.
