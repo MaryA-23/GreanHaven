@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\VegetableController;
 use App\Http\Controllers\VegetableRequestController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\OrderController;
 
 
 
@@ -48,3 +49,11 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
       Route::get('vegetables/{id}/request-status', [VegetableRequestController::class, 'status']);
 
   });
+
+  Route::prefix('orders')->group(function () {
+    Route::get('/', [OrderController::class, 'index']);          // List all orders
+    Route::post('/', [OrderController::class, 'store']);         // Create new order
+    Route::get('/{id}', [OrderController::class, 'show']);       // Show single order
+    Route::patch('/{id}/status', [OrderController::class, 'update']); // Update order status
+    Route::delete('/{id}', [OrderController::class, 'destroy']); // Delete order
+});

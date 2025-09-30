@@ -17,5 +17,11 @@ class Vegetable extends Model
     {
         return $this->hasMany(VegetableRequest::class);
     }
+
+    public function orderItems()
+{
+    return $this->hasMany(OrderItem::class);
+}
+
 }
 
