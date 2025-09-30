@@ -16,11 +16,11 @@ class OrderController extends Controller
      */
     public function index()
     {
-        $orders = Order::with(['company', 'items.vegetable'])->paginate(20);
+        $orders = Order::with(['company', 'items.vegetable'])->get();   
+        
         return OrderResource::collection($orders);
     }
-
-    /**
+        /**
      * Create a new order with multiple vegetables.
      */
     public function store(Request $request)
