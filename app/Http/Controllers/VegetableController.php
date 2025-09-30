@@ -81,18 +81,15 @@ class VegetableController extends Controller
     public function show(int $id): JsonResponse
     {
         $veg = Vegetable::withTrashed()->findOrFail($id);
-
+    
         $message = $veg->status === 'ready'
             ? "{$veg->name} is available now."
             : "{$veg->name} is not ready yet. You can request it.";
-
+    
         return response()->json([
             'success' => true,
-            'data' => [
-                'name' => $veg->name,
-                'status' => $veg->status,
-                'message' => $message,
-            ],
+            'message' => $message,
+            'data' => new VegetableResource($veg),
         ]);
     }
 
