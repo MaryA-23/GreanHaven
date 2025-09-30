@@ -169,44 +169,4 @@ class VegetableController extends Controller
         ], 400);
     }
 
-    /**
-     * Customer makes a request for a vegetable.
-     */
-    public function requestVegetable(Request $request, int $id): JsonResponse
-    {
-        $validated = $request->validate([
-            'customer_name' => 'required|string|max:255',
-            'customer_contact' => 'required|string|max:255',
-        ]);
-
-        $veg = Vegetable::findOrFail($id);
-
-        $veg->update([
-            'customer_name' => $validated['customer_name'],
-            'customer_contact' => $validated['customer_contact'],
-            'request_status' => 'pending',
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => "Your request for {$veg->name} has been received.",
-            'data' => new VegetableResource($veg),
-        ]);
-    }
-
-    /**
-     * Fulfill a customer's request.
-     */
-    public function fulfillRequest(int $id): JsonResponse
-    {
-        $veg = Vegetable::findOrFail($id);
-
-        $veg->update(['request_status' => 'fulfilled']);
-
-        return response()->json([
-            'success' => true,
-            'message' => "Request for {$veg->name} has been fulfilled.",
-            'data' => new VegetableResource($veg),
-        ]);
-    }
 }

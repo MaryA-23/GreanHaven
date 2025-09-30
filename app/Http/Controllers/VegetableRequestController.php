@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Vegetable;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use App\Models\VegetableRequest;
 use App\Http\Resources\VegetableResource;
 
 class VegetableRequestController extends Controller
@@ -20,53 +21,67 @@ class VegetableRequestController extends Controller
      */
     public function store(Request $request, int $vegetableId): JsonResponse
     {
-        $validated = $request->validate([
-            'customer_name' => 'required|string|max:255',
-            'customer_contact' => 'required|string|max:255',
-        ]);
 
-        $veg = Vegetable::findOrFail($vegetableId);
+    $validated = $request->validate([
+        'customer_name' => 'required|string|max:255',
+        'customer_contact' => 'required|string|max:255',
+    ]);
 
-        if ($veg->request_status === 'pending' || $veg->request_status === 'in_progress') {
-            return response()->json([
-                'success' => false,
-                'message' => 'There is already an active request for this vegetable.',
-            ], 409);
-        }
+    $veg = Vegetable::findOrFail($vegetableId);
 
-        $veg->update([
-            'customer_name' => $validated['customer_name'],
-            'customer_contact' => $validated['customer_contact'],
-            'request_status' => 'pending',
-        ]);
+    // Check if there is already a pending request for this vegetable by the same customer
+    $existingRequest = $veg->requests()
+        ->where('status', 'pending')
+        ->where('customer_contact', $validated['customer_contact'])
+        ->first();
 
+    if ($existingRequest) {
         return response()->json([
-            'success' => true,
-            'message' => "Your request for {$veg->name} has been received.",
-            'data' => new VegetableResource($veg),
-        ]);
+            'success' => false,
+            'message' => 'You already have a pending request for this vegetable.',
+        ], 409);
     }
+
+    // Create a new vegetable request
+    $vegRequest = $veg->requests()->create([
+        'customer_name' => $validated['customer_name'],
+        'customer_contact' => $validated['customer_contact'],
+        'status' => 'pending',
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => "Your request for {$veg->name} has been received.",
+        'data' => $vegRequest, // you can wrap it in a resource if you like
+    ]);
+    }
+
 
     /**
      * Fulfill a customer's request.
      */
-    public function fulfill(int $vegetableId): JsonResponse
+    public function fulfill(int $requestId): JsonResponse
     {
-        $veg = Vegetable::findOrFail($vegetableId);
+        // Find the specific vegetable request
+        $vegRequest = VegetableRequest::findOrFail($requestId);
 
-        if ($veg->request_status !== 'in_progress' && $veg->request_status !== 'pending') {
+        if ($vegRequest->status === 'fulfilled') {
             return response()->json([
                 'success' => false,
-                'message' => 'No active request to fulfill for this vegetable.',
+                'message' => 'This request has already been fulfilled.',
             ], 400);
         }
 
-        $veg->update(['request_status' => 'fulfilled']);
+        // Update the status to fulfilled
+        $vegRequest->update([
+            'status' => 'fulfilled',
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => "Request for {$veg->name} has been fulfilled.",
-            'data' => new VegetableResource($veg),
+            'message' => "Request for {$vegRequest->vegetable->name} has been fulfilled.",
+            'data' => $vegRequest,
         ]);
     }
+
 }
