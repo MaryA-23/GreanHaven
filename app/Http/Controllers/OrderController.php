@@ -27,50 +27,60 @@ class OrderController extends Controller
     }
 
     // Create a new order
-    public function store(Request $request)
-    {
-        $request->validate([
-            'items' => 'required|array|min:1',
-            'items.*.vegetable_id' => 'required|exists:vegetables,id',
-            'items.*.quantity' => 'required|integer|min:1',
-        ]);
-
-        $user = $request->user();
-        $companyId = $user->company_id;
-
-        DB::beginTransaction();
-        try {
-            $order = Order::create([
-                'company_id' => $companyId,
-                'status' => 'pending',
-                'total_price' => 0,
+     public function store(Request $request)
+        {
+            $request->validate([
+                'items' => 'required|array|min:1',
+                'items.*.vegetable_id' => 'required|exists:vegetables,id',
+                'items.*.quantity' => 'required|integer|min:1',
             ]);
 
-            $total = 0;
-
-            foreach ($request->items as $item) {
-                $veg = Vegetable::findOrFail($item['vegetable_id']);
-                $subtotal = $veg->price * $item['quantity'];
-
-                $order->items()->create([
-                    'vegetable_id' => $veg->id,
-                    'quantity' => $item['quantity'],
-                    'price' => $veg->price,
-                    'subtotal' => $subtotal,
-                ]);
-
-                $total += $subtotal;
+            // Get authenticated user
+            $user = $request->user();
+            if (!$user) {
+                return response()->json(['error' => 'Unauthenticated'], 401);
             }
 
-            $order->update(['total_price' => $total]);
-            DB::commit();
+            $companyId = $user->company_id;
+            if (!$companyId) {
+                return response()->json(['error' => 'User does not belong to any company'], 400);
+            }
 
-            return new OrderResource($order->load(['company', 'items.vegetable']));
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Failed to create order', 'message' => $e->getMessage()], 500);
+            DB::beginTransaction();
+            try {
+                // Create order
+                $order = Order::create([
+                    'company_id' => $companyId,
+                    'status' => 'pending',
+                    'total_price' => 0,
+                ]);
+
+                $total = 0;
+
+                foreach ($request->items as $item) {
+                    $veg = Vegetable::findOrFail($item['vegetable_id']);
+                    $subtotal = $veg->price * $item['quantity'];
+
+                    $order->items()->create([
+                        'vegetable_id' => $veg->id,
+                        'quantity' => $item['quantity'],
+                        'price' => $veg->price,
+                        'subtotal' => $subtotal,
+                    ]);
+
+                    $total += $subtotal;
+                }
+
+                $order->update(['total_price' => $total]);
+                DB::commit();
+
+                return new OrderResource($order->load(['company', 'items.vegetable']));
+            } catch (\Throwable $e) {
+                DB::rollBack();
+                return response()->json(['error' => 'Failed to create order', 'message' => $e->getMessage()], 500);
+            }
         }
-    }
+
 
     // Show single order
     public function show(Request $request, $id)
