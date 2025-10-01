@@ -45,8 +45,11 @@ class OrderController extends Controller
             'items.*.quantity' => 'required|integer|min:1',
         ]);
 
+        $user = $request->user();
+
         $order = Order::create([
-            'user_id' => $request->user()->id,
+            'user_id' => $user->id,
+            'company_id' => $user->company_id,
             'status' => 'pending',
             'total_price' => 0, // will update later
         ]);
