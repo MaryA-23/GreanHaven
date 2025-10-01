@@ -45,23 +45,27 @@ class OrderController extends Controller
             'items.*.quantity' => 'required|integer|min:1',
         ]);
 
+        // Get the logged-in user
         $user = $request->user();
 
+        // Create order with user_id (required) and optional company_id
         $order = Order::create([
             'user_id' => $user->id,
-            'company_id' => $user->company_id,
+            'company_id' => $user->company_id, // can be null if user has no company
             'status' => 'pending',
-            'total_price' => 0, // will update later
+            'total_price' => 0, // will calculate later
         ]);
 
         $total = 0;
 
+        // Create order items with dynamic vegetable prices
         foreach ($validated['items'] as $item) {
             $veg = Vegetable::findOrFail($item['vegetable_id']);
 
-            $price = $veg->price; // dynamic from DB
+            $price = $veg->price; // get dynamic price from DB
             $subtotal = $price * $item['quantity'];
 
+            // Create order item
             OrderItem::create([
                 'order_id' => $order->id,
                 'vegetable_id' => $veg->id,
@@ -73,8 +77,10 @@ class OrderController extends Controller
             $total += $subtotal;
         }
 
+        // Update order total price
         $order->update(['total_price' => $total]);
 
+        // Return clean JSON response with loaded items
         return response()->json([
             'success' => true,
             'message' => 'Order placed successfully.',
