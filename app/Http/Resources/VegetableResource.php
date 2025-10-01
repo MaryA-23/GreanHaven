@@ -23,6 +23,14 @@ class VegetableResource extends JsonResource
             'request_status' => $this->request_status,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+            
+            'price' => $this->price,
+            'quantity' => $this->quantity,
+            'category' => $this->category,
+            'description' => $this->description,
+            'unit' => $this->unit,
+            'is_available' => $this->is_available,
+
         ];
     }
 }

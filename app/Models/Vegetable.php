@@ -10,7 +10,15 @@ class Vegetable extends Model
 {
     use SoftDeletes, Notifiable;
     protected $fillable = [
-        'name', 'status', 'customer_name', 'customer_contact', 'request_status'
+        'name',
+        'status',
+        'price',
+        'quantity',
+        'category',
+        'description',
+        'unit',
+        'is_available',
+   
     ];
 
     public function requests()
