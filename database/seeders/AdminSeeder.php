@@ -21,7 +21,8 @@ class AdminSeeder extends Seeder
         User::firstOrCreate(
             ['email' => 'admin@greenhaven.com'],
             [
-                'name' => 'Super Admin',
+                'first_name' => 'Admin',
+                'last_name'=> 'Super',
                 'password' => Hash::make('password123'),
                 'role' => 'admin',
                 'company_id' => $adminCompany->id
