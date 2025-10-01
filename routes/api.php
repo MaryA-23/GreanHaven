@@ -50,7 +50,7 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
   });
 
-  Route::prefix('orders')->group(function () {
+  Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
     Route::get('/', [OrderController::class, 'index']);          // List all orders
     Route::post('/', [OrderController::class, 'store']);         // Create new order
     Route::get('/{id}', [OrderController::class, 'show']);       // Show single order
