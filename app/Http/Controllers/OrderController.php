@@ -2,128 +2,139 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Vegetable;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\JsonResponse;
 
 class OrderController extends Controller
 {
-    // List all orders (admin can see all, users can see only their company)
-    public function index(Request $request)
+    public function __construct()
     {
-        $user = $request->user();
-
-        if ($user->isAdmin()) {
-            $orders = Order::with(['company', 'items.vegetable'])->paginate(20);
-        } else {
-            $orders = Order::with(['company', 'items.vegetable'])
-                ->where('company_id', $user->company_id)
-                ->paginate(20);
-        }
-
-        return OrderResource::collection($orders);
+        $this->middleware('auth:sanctum');
     }
 
-    // Create a new order
-     public function store(Request $request)
-        {
-            $request->validate([
-                'items' => 'required|array|min:1',
-                'items.*.vegetable_id' => 'required|exists:vegetables,id',
-                'items.*.quantity' => 'required|integer|min:1',
-            ]);
-
-            // Get authenticated user
-            $user = $request->user();
-            if (!$user) {
-                return response()->json(['error' => 'Unauthenticated'], 401);
-            }
-
-            $companyId = $user->company_id;
-            if (!$companyId) {
-                return response()->json(['error' => 'User does not belong to any company'], 400);
-            }
-
-            DB::beginTransaction();
-            try {
-                // Create order
-                $order = Order::create([
-                    'company_id' => $companyId,
-                    'status' => 'pending',
-                    'total_price' => 0,
-                ]);
-
-                $total = 0;
-
-                foreach ($request->items as $item) {
-                    $veg = Vegetable::findOrFail($item['vegetable_id']);
-                    $subtotal = $veg->price * $item['quantity'];
-
-                    $order->items()->create([
-                        'vegetable_id' => $veg->id,
-                        'quantity' => $item['quantity'],
-                        'price' => $veg->price,
-                        'subtotal' => $subtotal,
-                    ]);
-
-                    $total += $subtotal;
-                }
-
-                $order->update(['total_price' => $total]);
-                DB::commit();
-
-                return new OrderResource($order->load(['company', 'items.vegetable']));
-            } catch (\Throwable $e) {
-                DB::rollBack();
-                return response()->json(['error' => 'Failed to create order', 'message' => $e->getMessage()], 500);
-            }
-        }
-
-
-    // Show single order
-    public function show(Request $request, $id)
+    /**
+     * List all orders (admins see all, users see only theirs).
+     */
+    public function index(Request $request): JsonResponse
     {
-        $order = Order::with(['company', 'items.vegetable'])->findOrFail($id);
-        $user = $request->user();
+        $query = Order::with('items.vegetable');
 
-        if (!$user->isAdmin() && $order->company_id !== $user->company_id) {
-            return response()->json(['error' => 'Unauthorized'], 403);
+        if ($request->user()->role !== 'admin') {
+            $query->where('user_id', $request->user()->id);
         }
 
-        return new OrderResource($order);
+        $orders = $query->paginate(10);
+
+        return response()->json([
+            'success' => true,
+            'data' => $orders,
+        ]);
     }
 
-    // Update order status (admin only)
-    public function update(Request $request, $id)
+    /**
+     * Create a new order (user).
+     */
+    public function store(Request $request): JsonResponse
     {
-        $request->validate([
-            'status' => 'required|in:pending,confirmed,delivered',
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.vegetable_id' => 'required|exists:vegetables,id',
+            'items.*.quantity' => 'required|integer|min:1',
         ]);
 
-        $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['error' => 'Unauthorized'], 403);
+        $order = Order::create([
+            'user_id' => $request->user()->id,
+            'status' => 'pending',
+            'total_price' => 0, // will update later
+        ]);
+
+        $total = 0;
+
+        foreach ($validated['items'] as $item) {
+            $veg = Vegetable::findOrFail($item['vegetable_id']);
+
+            $price = $veg->price; // dynamic from DB
+            $subtotal = $price * $item['quantity'];
+
+            OrderItem::create([
+                'order_id' => $order->id,
+                'vegetable_id' => $veg->id,
+                'quantity' => $item['quantity'],
+                'price' => $price,
+                'subtotal' => $subtotal,
+            ]);
+
+            $total += $subtotal;
+        }
+
+        $order->update(['total_price' => $total]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order placed successfully.',
+            'data' => $order->load('items.vegetable'),
+        ], 201);
+    }
+
+    /**
+     * Show a single order.
+     */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $order = Order::with('items.vegetable')->findOrFail($id);
+
+        if ($request->user()->role !== 'admin' && $order->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $order,
+        ]);
+    }
+
+    /**
+     * Update order status (admin only).
+     */
+    public function update(Request $request, int $id): JsonResponse
+    {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['success' => false, 'message' => 'Only admins can update orders.'], 403);
         }
 
         $order = Order::findOrFail($id);
-        $order->update(['status' => $request->status]);
 
-        return new OrderResource($order->load(['company', 'items.vegetable']));
+        $validated = $request->validate([
+            'status' => 'required|string|in:pending,completed,cancelled',
+        ]);
+
+        $order->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order updated successfully.',
+            'data' => $order->load('items.vegetable'),
+        ]);
     }
 
-    // Delete order (admin only)
-    public function destroy(Request $request, $id)
+    /**
+     * Delete an order (admin only).
+     */
+    public function destroy(Request $request, int $id): JsonResponse
     {
-        $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['error' => 'Unauthorized'], 403);
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['success' => false, 'message' => 'Only admins can delete orders.'], 403);
         }
 
         $order = Order::findOrFail($id);
         $order->delete();
 
-        return response()->noContent();
+        return response()->json([
+            'success' => true,
+            'message' => 'Order deleted successfully.',
+        ]);
     }
 }

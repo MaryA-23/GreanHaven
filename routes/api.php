@@ -54,6 +54,6 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
     Route::get('/', [OrderController::class, 'index']);          // List all orders
     Route::post('/', [OrderController::class, 'store']);         // Create new order
     Route::get('/{id}', [OrderController::class, 'show']);       // Show single order
-    Route::patch('/{id}/status', [OrderController::class, 'update']); // Update order status
-    Route::delete('/{id}', [OrderController::class, 'destroy']); // Delete order
+    Route::patch('/{id}/status', [OrderController::class, 'update'])->middleware('can:admin'); // Update order status
+    Route::delete('/{id}', [OrderController::class, 'destroy'])->middleware('can:admin'); // Delete order
 });

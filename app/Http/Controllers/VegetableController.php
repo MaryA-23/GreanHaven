@@ -13,7 +13,8 @@ class VegetableController extends Controller
 {
     public function __construct()
     {
-        // Protect routes except index and show
+        // Public: index, show
+        // Protected: store, update, destroy, restore
         $this->middleware('auth:sanctum')->except(['index', 'show']);
     }
 
@@ -54,19 +55,27 @@ class VegetableController extends Controller
     }
 
     /**
-     * Add a new vegetable.
+     * Add a new vegetable (Admin only).
      */
     public function store(Request $request): JsonResponse
     {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['error' => 'Unauthorized. Only admins can add vegetables.'], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'quantity' => 'required|integer|min:0',
+            'category' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'unit' => 'required|string|max:50',
+            'is_available' => 'nullable|boolean',
+            'supplier' => 'nullable|string|max:255',
             'status' => 'nullable|string|in:ready,not_ready',
         ]);
 
-        $veg = Vegetable::create([
-            'name' => $validated['name'],
-            'status' => $validated['status'] ?? 'not_ready',
-        ]);
+        $veg = Vegetable::create($validated);
 
         return response()->json([
             'success' => true,
@@ -76,16 +85,16 @@ class VegetableController extends Controller
     }
 
     /**
-     * Show vegetable status.
+     * Show vegetable details.
      */
     public function show(int $id): JsonResponse
     {
         $veg = Vegetable::withTrashed()->findOrFail($id);
-    
+
         $message = $veg->status === 'ready'
             ? "{$veg->name} is available now."
             : "{$veg->name} is not ready yet. You can request it.";
-    
+
         return response()->json([
             'success' => true,
             'message' => $message,
@@ -94,25 +103,31 @@ class VegetableController extends Controller
     }
 
     /**
-     * Update vegetable details or status.
+     * Update vegetable details (Admin only).
      */
     public function update(Request $request, int $id): JsonResponse
     {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['error' => 'Unauthorized. Only admins can update vegetables.'], 403);
+        }
+
         $veg = Vegetable::findOrFail($id);
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
+            'price' => 'sometimes|numeric|min:0',
+            'quantity' => 'sometimes|integer|min:0',
+            'category' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'unit' => 'sometimes|string|max:50',
+            'is_available' => 'nullable|boolean',
+            'supplier' => 'nullable|string|max:255',
             'status' => 'sometimes|string|in:ready,not_ready',
-            'customer_name' => 'sometimes|nullable|string|max:255',
-            'customer_contact' => 'sometimes|nullable|string|max:255',
-            'request_status' => 'sometimes|string|in:pending,in_progress,fulfilled',
         ]);
 
         $oldStatus = $veg->status;
-
         $veg->update($validated);
 
-        // Log the update
         Log::info("Vegetable updated", [
             'id' => $veg->id,
             'old_status' => $oldStatus,
@@ -120,7 +135,6 @@ class VegetableController extends Controller
             'updated_fields' => array_keys($validated),
         ]);
 
-        // Dispatch event if status changed to ready
         if ($oldStatus !== 'ready' && ($validated['status'] ?? $oldStatus) === 'ready') {
             VegetableReady::dispatch($veg);
         }
@@ -133,10 +147,14 @@ class VegetableController extends Controller
     }
 
     /**
-     * Soft delete a vegetable.
+     * Soft delete a vegetable (Admin only).
      */
-    public function destroy(int $id): JsonResponse
+    public function destroy(Request $request, int $id): JsonResponse
     {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['error' => 'Unauthorized. Only admins can delete vegetables.'], 403);
+        }
+
         $veg = Vegetable::findOrFail($id);
         $veg->delete();
 
@@ -147,10 +165,14 @@ class VegetableController extends Controller
     }
 
     /**
-     * Restore a soft deleted vegetable.
+     * Restore a soft deleted vegetable (Admin only).
      */
-    public function restore(int $id): JsonResponse
+    public function restore(Request $request, int $id): JsonResponse
     {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['error' => 'Unauthorized. Only admins can restore vegetables.'], 403);
+        }
+
         $veg = Vegetable::withTrashed()->findOrFail($id);
 
         if ($veg->trashed()) {
@@ -168,5 +190,4 @@ class VegetableController extends Controller
             'message' => 'Vegetable is not deleted.',
         ], 400);
     }
-
 }
