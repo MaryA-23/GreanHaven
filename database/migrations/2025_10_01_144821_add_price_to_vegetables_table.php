@@ -12,13 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('vegetables', function (Blueprint $table) {
-            $table->decimal('price', 10, 2)->default(0);
-            $table->integer('quantity')->default(0);
-            $table->string('category')->nullable();
-            $table->text('description')->nullable();
-            $table->string('unit')->default('kg');
-            $table->boolean('is_available')->default(true);
-            
+            if (!Schema::hasColumn('vegetables', 'price')) {
+                $table->decimal('price', 10, 2)->default(0);
+            }
         });
     }
 
@@ -27,8 +23,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('vegetables', function (Blueprint $table) {
-            $table->dropColumn('price');
-        });
+       //
     }
 };
