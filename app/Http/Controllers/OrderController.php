@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Http\Controllers;
 
 use App\Http\Resources\OrderResource;
@@ -11,33 +10,38 @@ use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
-    /**
-     * List all orders with related company and items.
-     */
-    public function index()
+    // List all orders (admin can see all, users can see only their company)
+    public function index(Request $request)
     {
-        $orders = Order::with(['company', 'items.vegetable'])->get();   
-        
+        $user = $request->user();
+
+        if ($user->isAdmin()) {
+            $orders = Order::with(['company', 'items.vegetable'])->paginate(20);
+        } else {
+            $orders = Order::with(['company', 'items.vegetable'])
+                ->where('company_id', $user->company_id)
+                ->paginate(20);
+        }
+
         return OrderResource::collection($orders);
     }
-        /**
-     * Create a new order with multiple vegetables.
-     */
+
+    // Create a new order
     public function store(Request $request)
     {
         $request->validate([
-            'company_id' => 'required|exists:companies,id',
             'items' => 'required|array|min:1',
             'items.*.vegetable_id' => 'required|exists:vegetables,id',
             'items.*.quantity' => 'required|integer|min:1',
         ]);
 
-        DB::beginTransaction();
+        $user = $request->user();
+        $companyId = $user->company_id;
 
+        DB::beginTransaction();
         try {
-            // Create order with status pending
             $order = Order::create([
-                'company_id' => $request->company_id,
+                'company_id' => $companyId,
                 'status' => 'pending',
                 'total_price' => 0,
             ]);
@@ -59,37 +63,39 @@ class OrderController extends Controller
             }
 
             $order->update(['total_price' => $total]);
-
             DB::commit();
 
             return new OrderResource($order->load(['company', 'items.vegetable']));
-
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
-            return response()->json([
-                'error' => 'Failed to create order',
-                'message' => $e->getMessage()
-            ], 500);
+            return response()->json(['error' => 'Failed to create order', 'message' => $e->getMessage()], 500);
         }
     }
 
-    /**
-     * Show a single order.
-     */
-    public function show(string $id)
+    // Show single order
+    public function show(Request $request, $id)
     {
         $order = Order::with(['company', 'items.vegetable'])->findOrFail($id);
+        $user = $request->user();
+
+        if (!$user->isAdmin() && $order->company_id !== $user->company_id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         return new OrderResource($order);
     }
 
-    /**
-     * Update only the status of an order.
-     */
-    public function update(Request $request, string $id)
+    // Update order status (admin only)
+    public function update(Request $request, $id)
     {
         $request->validate([
             'status' => 'required|in:pending,confirmed,delivered',
         ]);
+
+        $user = $request->user();
+        if (!$user->isAdmin()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
 
         $order = Order::findOrFail($id);
         $order->update(['status' => $request->status]);
@@ -97,14 +103,17 @@ class OrderController extends Controller
         return new OrderResource($order->load(['company', 'items.vegetable']));
     }
 
-    /**
-     * Delete an order and its items.
-     */
-    public function destroy(string $id)
+    // Delete order (admin only)
+    public function destroy(Request $request, $id)
     {
+        $user = $request->user();
+        if (!$user->isAdmin()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $order = Order::findOrFail($id);
         $order->delete();
 
-        return response()->json(['message' => 'Order deleted successfully']);
+        return response()->noContent();
     }
 }

@@ -51,4 +51,13 @@ class User extends Authenticatable
     {
         return "{$this->first_name} {$this->last_name}";
     }
+
+    public function company() {
+        return $this->belongsTo(Company::class);
+    }
+    
+    public function isAdmin() {
+        return $this->role === 'admin';
+    }
+    
 }
