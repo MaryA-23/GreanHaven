@@ -72,7 +72,7 @@ class PaymentController extends Controller
             'status'         => $data['status'] ?? 'unpaid',
             'payment_method' => $data['payment_method'],
             'transaction_id' => $data['transaction_id'],
-            'paid_at'        => $data['paid_at'] ?? null,
+            'paid_at' => $request->input('status') === 'paid' ? now() : null,
             'notes'          => $data['notes'],
         ]);
 
