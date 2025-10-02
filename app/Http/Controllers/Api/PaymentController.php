@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Order;
+use App\Http\Resources\PaymentResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
@@ -31,13 +32,13 @@ class PaymentController extends Controller
         $user = $request->user();
 
         $validator = Validator::make($request->all(), [
-            'order_id' => 'required|exists:orders,id',
-            'amount' => 'required|numeric|min:0',
-            'status' => 'in:unpaid,paid,pending,failed',
+            'order_id'       => 'required|exists:orders,id',
+            'amount'         => 'required|numeric|min:0',
+            'status'         => 'in:unpaid,paid,pending,failed',
             'payment_method' => 'nullable|string',
-            'transaction_id' => 'nullable|string',
-            'paid_at' => 'nullable|date',
-            'notes' => 'nullable|string',
+            'transaction_id' => 'required_if:status,paid|nullable|string', // Enforce for 'paid'
+            'paid_at'        => 'nullable|date',
+            'notes'          => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -50,27 +51,40 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Unauthorized: You do not own this order'], 403);
         }
 
-        // Optional: Ensure amount matches order total_price
+        // Ensure amount matches order total_price
         if ($request->amount != $order->total_price) {
             return response()->json(['error' => 'Amount must match order total_price'], 400);
         }
 
+        // Auto-set paid_at and validate for 'paid' status
+        $data = $request->only(['amount', 'status', 'payment_method', 'transaction_id', 'notes']);
+        if ($request->status === 'paid') {
+            if (empty($data['transaction_id'])) {
+                return response()->json(['error' => 'Transaction ID is required for paid status'], 422);
+            }
+            $data['paid_at'] = $request->paid_at ?? now(); // Auto-set if not provided
+        }
+
         $payment = Payment::create([
-            'order_id' => $order->id,
-            'user_id' => $user->id,
-            'amount' => $request->amount,
-            'status' => $request->status ?? 'unpaid',
-            'payment_method' => $request->payment_method,
-            'transaction_id' => $request->transaction_id,
-            'paid_at' => $request->paid_at,
-            'notes' => $request->notes,
+            'order_id'       => $order->id,
+            'user_id'        => $user->id,
+            'amount'         => $data['amount'],
+            'status'         => $data['status'] ?? 'unpaid',
+            'payment_method' => $data['payment_method'],
+            'transaction_id' => $data['transaction_id'],
+            'paid_at'        => $data['paid_at'] ?? null,
+            'notes'          => $data['notes'],
         ]);
 
-        $order->update(['status' => 'confirmed']);
-        
+        // Update order status if paid
+        if ($data['status'] === 'paid') {
+            $order->update(['status' => 'completed']); // Or 'confirmed' as in your response
+        }
+
+        // Use Resource for formatted response
         return response()->json([
             'message' => 'Payment created successfully',
-            'payment' => $payment->load('order'),
+            'payment' => new PaymentResource($payment->load('order')), // Wrap in resource
         ], 201);
     }
 
