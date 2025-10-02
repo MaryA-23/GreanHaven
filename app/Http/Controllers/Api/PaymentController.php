@@ -3,33 +3,41 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\PaymentResource;
 use App\Models\Order;
 use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Http\JsonResponse;
 
 class PaymentController extends Controller
 {
-    // Create a payment record for an order (initially unpaid)
-    public function store(Request $request, Order $order): JsonResponse
+    // List logged-in user's payments with order info
+    public function index(Request $request)
     {
-        // Authorization: Ensure user owns the order
+        $payments = Payment::with(['order'])
+            ->where('user_id', $request->user()->id)
+            ->paginate(10);
+
+        return PaymentResource::collection($payments);
+    }
+
+    // Create a payment record for an order (initially unpaid)
+    public function store(Request $request, Order $order)
+    {
         if ($order->user_id !== $request->user()->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        // Validation
         $validator = Validator::make($request->all(), [
             'amount' => 'required|numeric|min:0',
+            'payment_method' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Ensure amount matches order total (for integrity)
         if ($request->amount != $order->total_price) {
             return response()->json(['error' => 'Amount must match order total'], 400);
         }
@@ -41,19 +49,16 @@ class PaymentController extends Controller
                 'order_id' => $order->id,
                 'user_id' => $request->user()->id,
                 'amount' => $request->amount,
-                'status' => 'unpaid', // Default
-                'payment_method' => $request->payment_method ?? null, // Optional for now
+                'status' => 'unpaid',
+                'payment_method' => $request->payment_method,
             ]);
 
-            // Update order status if needed (e.g., mark as 'processing')
+            // Optional: update order status
             $order->update(['status' => 'processing']);
 
             DB::commit();
 
-            return response()->json([
-                'message' => 'Payment record created successfully',
-                'payment' => $payment->load('order'), // Eager load for frontend
-            ], 201);
+            return new PaymentResource($payment->load('order'));
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -61,32 +66,28 @@ class PaymentController extends Controller
         }
     }
 
-    // Get payment for a specific order
-    public function show(Order $order): JsonResponse
+    // Show payment for a specific order
+    public function show(Order $order)
     {
         if ($order->user_id !== request()->user()->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
-        $payment = $order->payment ?? null;
+        $payment = $order->payment;
 
-        return response()->json([
-            'payment' => $payment,
-            'order' => $order,
-        ]);
+        return new PaymentResource($payment ? $payment->load('order') : null);
     }
 
-    // Update payment status (e.g., mark as paid after manual verification or webhook)
-    public function updateStatus(Request $request, Payment $payment): JsonResponse
+    // Update payment status (paid/unpaid etc.)
+    public function updateStatus(Request $request, Payment $payment)
     {
-        // Authorization: User or admin
-        if ($payment->order->user_id !== $request->user()->id && !$request->user()->isAdmin()) { // Assuming you have an isAdmin() method
+        if ($payment->order->user_id !== $request->user()->id && !$request->user()->isAdmin()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         $validator = Validator::make($request->all(), [
             'status' => 'required|in:paid,unpaid,pending,failed',
-            'transaction_id' => 'nullable|string', // For gateways
+            'transaction_id' => 'nullable|string',
             'notes' => 'nullable|string',
         ]);
 
@@ -101,24 +102,10 @@ class PaymentController extends Controller
             'notes' => $request->notes,
         ]);
 
-        // Optional: Update order status (e.g., 'completed' if paid)
         if ($request->status === 'paid') {
             $payment->order->update(['status' => 'completed']);
         }
 
-        return response()->json([
-            'message' => 'Payment status updated',
-            'payment' => $payment->fresh()->load('order'),
-        ]);
-    }
-
-    // List user's payments (with orders)
-    public function index(Request $request): JsonResponse
-    {
-        $payments = Payment::with(['order', 'user'])
-            ->where('user_id', $request->user()->id)
-            ->paginate(10); // Pagination for Angular
-
-        return response()->json($payments);
+        return new PaymentResource($payment->fresh()->load('order'));
     }
 }

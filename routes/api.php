@@ -61,9 +61,9 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
 
 // Assuming you have routes for orders already
-Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/orders/{order}/payments', [PaymentController::class, 'store']);
-    Route::get('/orders/{order}/payments', [PaymentController::class, 'show']);
-    Route::put('/payments/{payment}/status', [PaymentController::class, 'updateStatus']);
-    Route::get('/payments', [PaymentController::class, 'index']);
+Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
+    Route::get('/', [PaymentController::class, 'index']); // List user payments
+    Route::post('/order/{order}', [PaymentController::class, 'store']); // Create payment for order
+    Route::get('/order/{order}', [PaymentController::class, 'show']); // Show payment for order
+    Route::patch('/{payment}/status', [PaymentController::class, 'updateStatus']); // Update payment status
 });
