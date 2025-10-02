@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\PaymentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\VegetableController;
@@ -56,4 +57,13 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
     Route::get('/{id}', [OrderController::class, 'show']);       // Show single order
     Route::patch('/{id}/status', [OrderController::class, 'update'])->middleware('can:admin'); // Update order status
     Route::delete('/{id}', [OrderController::class, 'destroy'])->middleware('can:admin'); // Delete order
+});
+
+
+// Assuming you have routes for orders already
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/orders/{order}/payments', [PaymentController::class, 'store']);
+    Route::get('/orders/{order}/payments', [PaymentController::class, 'show']);
+    Route::put('/payments/{payment}/status', [PaymentController::class, 'updateStatus']);
+    Route::get('/payments', [PaymentController::class, 'index']);
 });

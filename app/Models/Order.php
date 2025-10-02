@@ -29,4 +29,17 @@ class Order extends Model
     public function user() {
         return $this->belongsTo(User::class);
     }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+
+    // Optional: Access payment status easily
+    public function getPaymentStatusAttribute()
+    {
+        return $this->payment?->status ?? 'unpaid';
+    }
+
 }
