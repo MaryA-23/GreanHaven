@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
@@ -16,16 +17,10 @@ class PaymentResource extends JsonResource
             'status' => $this->status,
             'payment_method' => $this->payment_method,
             'transaction_id' => $this->transaction_id,
-            'paid_at' => $this->paid_at?->toDateTimeString(),
+            'paid_at' => $this->paid_at ? $this->paid_at->toDateTimeString() : null,
             'notes' => $this->notes,
             'created_at' => $this->created_at->toDateTimeString(),
             'updated_at' => $this->updated_at->toDateTimeString(),
-            'order' => new \App\Http\Resources\OrderResource($this->whenLoaded('order')),
-            'user' => [
-                'name' => $this->user?->name,
-                'email' => $this->user?->email,
-            ],
         ];
     }
 }
-

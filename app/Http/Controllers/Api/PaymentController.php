@@ -3,100 +3,40 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\PaymentResource;
-use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Order;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Http\JsonResponse;
 
 class PaymentController extends Controller
 {
-    // List logged-in user's payments with order info
-    public function index(Request $request)
+    /**
+     * Display a listing of the authenticated user's payments.
+     */
+    public function index(Request $request): JsonResponse
     {
-        $payments = Payment::with(['order'])
+        $payments = Payment::with('order')
             ->where('user_id', $request->user()->id)
             ->paginate(10);
 
-        return PaymentResource::collection($payments);
+        return response()->json($payments);
     }
 
-    // Create a payment record for an order (initially unpaid)
-    public function store(Request $request, Order $order)
+    /**
+     * Store a newly created payment for an order.
+     */
+    public function store(Request $request): JsonResponse
     {
-        if ($order->user_id !== $request->user()->id) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
+        $user = $request->user();
 
         $validator = Validator::make($request->all(), [
+            'order_id' => 'required|exists:orders,id',
             'amount' => 'required|numeric|min:0',
+            'status' => 'in:unpaid,paid,pending,failed',
             'payment_method' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        if ($request->amount != $order->total_price) {
-            return response()->json(['error' => 'Amount must match order total'], 400);
-        }
-
-        try {
-            DB::beginTransaction();
-
-            $payment = Payment::create([
-                'order_id' => $order->id,
-                'user_id' => $request->user()->id,
-                'amount' => $request->amount,
-                'status' => 'unpaid',
-                'payment_method' => $request->payment_method,
-            ]);
-
-            // Optional: update order status
-            $order->update(['status' => 'processing']);
-
-            DB::commit();
-
-            return new PaymentResource($payment->load('order'));
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['error' => 'Failed to create payment'], 500);
-        }
-    }
-
-    // Show payment for a specific order
-    public function show(Order $order)
-    {
-        if ($order->user_id !== request()->user()->id) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
-
-        $payment = $order->payment;
-
-        
-    if (!$payment) {
-        return response()->json([
-            'error' => 'No payment found for this order',
-            'order_id' => $order->id,
-            'order_status' => $order->status,
-        ], 404);
-        
-    }
-    return new PaymentResource($payment->load('order'));
-    }
-
-    // Update payment status (paid/unpaid etc.)
-    public function updateStatus(Request $request, Payment $payment)
-    {
-        if ($payment->order->user_id !== $request->user()->id && !$request->user()->isAdmin()) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'status' => 'required|in:paid,unpaid,pending,failed',
             'transaction_id' => 'nullable|string',
+            'paid_at' => 'nullable|date',
             'notes' => 'nullable|string',
         ]);
 
@@ -104,17 +44,102 @@ class PaymentController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $payment->update([
-            'status' => $request->status,
+        // Verify order ownership
+        $order = Order::find($request->order_id);
+        if ($order->user_id !== $user->id) {
+            return response()->json(['error' => 'Unauthorized: You do not own this order'], 403);
+        }
+
+        // Optional: Ensure amount matches order total_price
+        if ($request->amount != $order->total_price) {
+            return response()->json(['error' => 'Amount must match order total_price'], 400);
+        }
+
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'amount' => $request->amount,
+            'status' => $request->status ?? 'unpaid',
+            'payment_method' => $request->payment_method,
             'transaction_id' => $request->transaction_id,
-            'paid_at' => $request->status === 'paid' ? now() : null,
+            'paid_at' => $request->paid_at,
             'notes' => $request->notes,
         ]);
 
-        if ($request->status === 'paid') {
+        return response()->json([
+            'message' => 'Payment created successfully',
+            'payment' => $payment->load('order'),
+        ], 201);
+    }
+
+    /**
+     * Display the specified payment.
+     */
+    public function show(Request $request, Payment $payment): JsonResponse
+    {
+        // Authorization: user must own the payment
+        if ($payment->user_id !== $request->user()->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        return response()->json($payment->load('order'));
+    }
+
+    /**
+     * Update the specified payment.
+     */
+    public function update(Request $request, Payment $payment): JsonResponse
+    {
+        // Authorization: user must own the payment
+        if ($payment->user_id !== $request->user()->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'amount' => 'sometimes|numeric|min:0',
+            'status' => 'sometimes|in:unpaid,paid,pending,failed',
+            'payment_method' => 'nullable|string',
+            'transaction_id' => 'nullable|string',
+            'paid_at' => 'nullable|date',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $payment->update($request->only([
+            'amount',
+            'status',
+            'payment_method',
+            'transaction_id',
+            'paid_at',
+            'notes',
+        ]));
+
+        // Optional: Update order status if payment marked paid
+        if ($request->has('status') && $request->status === 'paid') {
             $payment->order->update(['status' => 'completed']);
         }
 
-        return new PaymentResource($payment->fresh()->load('order'));
+        return response()->json([
+            'message' => 'Payment updated successfully',
+            'payment' => $payment->fresh()->load('order'),
+        ]);
+    }
+
+    /**
+     * Remove the specified payment.
+     */
+    public function destroy(Request $request, Payment $payment): JsonResponse
+    {
+        // Authorization: user must own the payment
+        if ($payment->user_id !== $request->user()->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        $payment->delete();
+
+        return response()->json(['message' => 'Payment deleted successfully']);
     }
 }
