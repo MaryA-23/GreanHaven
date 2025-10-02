@@ -115,7 +115,7 @@ class PaymentController extends Controller
             'amount' => 'sometimes|numeric|min:0',
             'status' => 'sometimes|in:unpaid,paid,pending,failed',
             'payment_method' => 'nullable|string',
-            'transaction_id' => 'nullable|string',
+           'transaction_id' => 'required_if:status,paid|nullable|string|unique:payments,transaction_id',
             'paid_at' => 'nullable|date',
             'notes' => 'nullable|string',
         ]);
