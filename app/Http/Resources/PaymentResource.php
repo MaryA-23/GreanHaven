@@ -22,7 +22,6 @@ class PaymentResource extends JsonResource
             'updated_at' => $this->updated_at->toDateTimeString(),
             'order' => new \App\Http\Resources\OrderResource($this->whenLoaded('order')),
             'user' => [
-                'id' => $this->user?->id,
                 'name' => $this->user?->name,
                 'email' => $this->user?->email,
             ],
