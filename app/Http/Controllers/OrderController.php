@@ -48,6 +48,11 @@ class OrderController extends Controller
         // Get the logged-in user
         $user = $request->user();
 
+        if (!$user) {
+            return response()->json(['error' => 'Unauthenticated'], 401);
+        }
+        
+
         // Create order with user_id (required) and optional company_id
         $order = Order::create([
             'user_id' => $user->id,
