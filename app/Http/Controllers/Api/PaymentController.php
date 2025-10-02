@@ -77,7 +77,12 @@ class PaymentController extends Controller
 
         
     if (!$payment) {
-        return response()->json(['error' => 'No payment found for this order'], 404);
+        return response()->json([
+            'error' => 'No payment found for this order',
+            'order_id' => $order->id,
+            'order_status' => $order->status,
+        ], 404);
+        
     }
     return new PaymentResource($payment->load('order'));
     }
