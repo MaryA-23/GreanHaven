@@ -66,6 +66,8 @@ class PaymentController extends Controller
             'notes' => $request->notes,
         ]);
 
+        $order->update(['status' => 'confirmed']);
+        
         return response()->json([
             'message' => 'Payment created successfully',
             'payment' => $payment->load('order'),
