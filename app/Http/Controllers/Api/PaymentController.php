@@ -75,7 +75,11 @@ class PaymentController extends Controller
 
         $payment = $order->payment;
 
-        return new PaymentResource($payment ? $payment->load('order') : null);
+        
+    if (!$payment) {
+        return response()->json(['error' => 'No payment found for this order'], 404);
+    }
+    return new PaymentResource($payment->load('order'));
     }
 
     // Update payment status (paid/unpaid etc.)
