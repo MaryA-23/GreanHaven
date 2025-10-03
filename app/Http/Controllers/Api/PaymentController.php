@@ -28,53 +28,67 @@ class PaymentController extends Controller
     /**
      * Redirect user to Paystack payment page.
      */
-     public function initialize(Request $request)
+     // Initialize a payment and get Paystack authorization URL
+    public function initialize(Request $request)
     {
         $request->validate([
             'order_id' => 'required|exists:orders,id',
         ]);
 
-        $order = Order::findOrFail($request->order_id);
+        $order = Order::with('user')->findOrFail($request->order_id);
 
+        // Prepare payment data for Paystack
         $paymentData = [
-            "amount" => $order->total_price * 100, // amount in kobo
-            "email" => $order->user->email,
-            "orderID" => $order->id,
+            'amount' => $order->total_price * 100, // Paystack expects amount in kobo
+            'email' => $order->user->email,
+            'metadata' => [
+                'order_id' => $order->id
+            ]
         ];
 
-        return response()->json([
-        'message' => 'Payment initialized test works!',
-        'order_id' => $request->order_id
-     ]);
-    
+        try {
+            // Redirect user to Paystack payment page
+            return Paystack::getAuthorizationUrl($paymentData)->redirectNow();
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Payment initialization failed',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
-      /**
-     * Handle Paystack callback after payment.
-     */
-    public function callback()
+    // Paystack callback to verify payment
+    public function callback(Request $request)
     {
         $paymentDetails = Paystack::getPaymentData();
 
         if ($paymentDetails['data']['status'] === 'success') {
-            $orderId = $paymentDetails['data']['metadata']['order_id'] ?? null;
+            $metadata = $paymentDetails['data']['metadata'];
+            $orderId = $metadata['order_id'] ?? null;
             $amount = $paymentDetails['data']['amount'] / 100;
 
             if ($orderId) {
+                // Record payment in payments table
                 Payment::create([
                     'order_id' => $orderId,
                     'amount' => $amount,
                     'status' => 'paid',
                     'payment_method' => 'Paystack',
                 ]);
+
+                // Optionally, update order status
+                $order = Order::find($orderId);
+                $order->update(['status' => 'confirmed']);
             }
 
-            return response()->json(['message' => 'Payment successful', 'data' => $paymentDetails]);
+            return response()->json([
+                'message' => 'Payment successful',
+                'data' => $paymentDetails
+            ]);
         }
 
         return response()->json(['error' => 'Payment failed'], 400);
     }
-
 
     /**
      * Store a newly created payment for an order.
