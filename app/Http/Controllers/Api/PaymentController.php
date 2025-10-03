@@ -42,7 +42,11 @@ class PaymentController extends Controller
             "orderID" => $order->id,
         ];
 
-        return Paystack::getAuthorizationUrl($paymentData)->redirectNow();
+        return response()->json([
+        'message' => 'Payment initialized test works!',
+        'order_id' => $request->order_id
+     ]);
+    
     }
 
       /**
