@@ -66,11 +66,9 @@ Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
     Route::post('/order/{order}', [PaymentController::class, 'store']); // Create payment for order
     Route::get('/order/{order}', [PaymentController::class, 'show']); // Show payment for order
     Route::patch('/{payment}/status', [PaymentController::class, 'updateStatus']); // Update payment status
-    
+    Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
+    Route::get('/paystack/callback', [PaymentController::class, 'callback']);
 });
 
-Route::prefix('payments')->group(function () {
-    Route::post('/pay', [PaymentController::class, 'redirectToGateway']);
-    Route::get('/callback', [PaymentController::class, 'handleGatewayCallback']);
-});
+
 

@@ -28,7 +28,7 @@ class PaymentController extends Controller
     /**
      * Redirect user to Paystack payment page.
      */
-    public function redirectToGateway(Request $request)
+     public function initialize(Request $request)
     {
         $request->validate([
             'order_id' => 'required|exists:orders,id',
@@ -36,66 +36,40 @@ class PaymentController extends Controller
 
         $order = Order::findOrFail($request->order_id);
 
-        // Authorization: user must own the order
-        if ($order->user_id !== $request->user()->id) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
-
-        // Prepare metadata (extra info you want back)
-        $metadata = [
-            'order_id' => $order->id,
-            'user_id'  => $request->user()->id,
+        $paymentData = [
+            "amount" => $order->total_price * 100, // amount in kobo
+            "email" => $order->user->email,
+            "orderID" => $order->id,
         ];
 
-        // Set Paystack request details
-        return Paystack::getAuthorizationUrl([
-            'amount' => $order->total_price * 100, // Paystack expects amount in kobo
-            'email'  => $request->user()->email,
-            'metadata' => $metadata,
-        ])->redirectNow();
+        return Paystack::getAuthorizationUrl($paymentData)->redirectNow();
     }
 
       /**
      * Handle Paystack callback after payment.
      */
-    public function handleGatewayCallback()
-{
-    try {
+    public function callback()
+    {
         $paymentDetails = Paystack::getPaymentData();
 
-        $status = $paymentDetails['data']['status'];
-        $reference = $paymentDetails['data']['reference'];
-        $amount = $paymentDetails['data']['amount'] / 100; // Paystack stores in kobo
-        $orderId = $paymentDetails['data']['metadata']['order_id'] ?? null;
-        $transactionId = $paymentDetails['data']['id'];
+        if ($paymentDetails['data']['status'] === 'success') {
+            $orderId = $paymentDetails['data']['metadata']['order_id'] ?? null;
+            $amount = $paymentDetails['data']['amount'] / 100;
 
-        if ($status === 'success' && $orderId) {
-            // Save payment
-            $payment = Payment::create([
-                'order_id'       => $orderId,
-                'user_id'        => auth()->id() ?? null,
-                'amount'         => $amount,
-                'status'         => 'paid',
-                'payment_method' => 'Paystack',
-                'transaction_id' => $transactionId,
-                'paid_at'        => now(),
-                'notes'          => 'Payment successful',
-            ]);
+            if ($orderId) {
+                Payment::create([
+                    'order_id' => $orderId,
+                    'amount' => $amount,
+                    'status' => 'paid',
+                    'payment_method' => 'Paystack',
+                ]);
+            }
 
-            // Update order status
-            Order::where('id', $orderId)->update(['status' => 'completed']);
-
-            // ✅ Redirect back to Angular with success
-            return redirect()->away(config('app.frontend_url')."/payment-success?order_id={$orderId}&payment_id={$payment->id}");
+            return response()->json(['message' => 'Payment successful', 'data' => $paymentDetails]);
         }
 
-        // ❌ Redirect back to Angular with failure
-        return redirect()->away(config('app.frontend_url')."/payment-failed?reference={$reference}");
-
-    } catch (\Exception $e) {
-        return redirect()->away(config('app.frontend_url')."/payment-failed?error=" . urlencode($e->getMessage()));
+        return response()->json(['error' => 'Payment failed'], 400);
     }
-}
 
 
     /**
