@@ -29,7 +29,7 @@ class PaymentController extends Controller
      * Redirect user to Paystack payment page.
      */
      // Initialize a payment and get Paystack authorization URL
-   public function initialize(Request $request)
+ public function initialize(Request $request)
 {
     $request->validate([
         'order_id' => 'required|exists:orders,id',
@@ -40,14 +40,16 @@ class PaymentController extends Controller
     $paymentData = [
         'amount' => $order->total_price * 100,
         'email' => $order->user->email,
-        'metadata' => [
-            'order_id' => $order->id
-        ]
+        'metadata' => ['order_id' => $order->id],
     ];
 
     try {
-        // Disable SSL verification for local dev
-        return Paystack::getAuthorizationUrl($paymentData, false)->redirectNow();
+        $authorization = Paystack::getAuthorizationUrl($paymentData);
+
+        // Instead of redirecting, just return the URL
+        return response()->json([
+            'authorization_url' => $authorization->url
+        ]);
     } catch (\Exception $e) {
         return response()->json([
             'error' => 'Payment initialization failed',
