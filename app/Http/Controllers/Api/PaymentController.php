@@ -78,7 +78,7 @@ class PaymentController extends Controller
 
         // Update order status if paid
         if ($data['status'] === 'paid') {
-            $order->update(['status' => 'completed']); // Or 'confirmed' as in your response
+            $order->update(['status' => 'confirmed']); // Or 'confirmed' as in your response
         }
 
         // Use Resource for formatted response
