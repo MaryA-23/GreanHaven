@@ -29,33 +29,33 @@ class PaymentController extends Controller
      * Redirect user to Paystack payment page.
      */
      // Initialize a payment and get Paystack authorization URL
-    public function initialize(Request $request)
-    {
-        $request->validate([
-            'order_id' => 'required|exists:orders,id',
-        ]);
+   public function initialize(Request $request)
+{
+    $request->validate([
+        'order_id' => 'required|exists:orders,id',
+    ]);
 
-        $order = Order::with('user')->findOrFail($request->order_id);
+    $order = Order::with('user')->findOrFail($request->order_id);
 
-        // Prepare payment data for Paystack
-        $paymentData = [
-            'amount' => $order->total_price * 100, // Paystack expects amount in kobo
-            'email' => $order->user->email,
-            'metadata' => [
-                'order_id' => $order->id
-            ]
-        ];
+    $paymentData = [
+        'amount' => $order->total_price * 100,
+        'email' => $order->user->email,
+        'metadata' => [
+            'order_id' => $order->id
+        ]
+    ];
 
-        try {
-            // Redirect user to Paystack payment page
-            return Paystack::getAuthorizationUrl($paymentData)->redirectNow();
-        } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Payment initialization failed',
-                'message' => $e->getMessage()
-            ], 500);
-        }
+    try {
+        // Disable SSL verification for local dev
+        return Paystack::getAuthorizationUrl($paymentData, false)->redirectNow();
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Payment initialization failed',
+            'message' => $e->getMessage()
+        ], 500);
     }
+}
+
 
     // Paystack callback to verify payment
     public function callback(Request $request)
