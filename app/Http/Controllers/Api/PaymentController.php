@@ -60,6 +60,7 @@ class PaymentController extends Controller
      * Paystack callback to verify payment.
      */
     // Paystack callback to verify payment
+   // Paystack callback to verify payment
     public function callback(Request $request)
     {
         $paymentDetails = Paystack::getPaymentData();
@@ -68,17 +69,16 @@ class PaymentController extends Controller
             $metadata = $paymentDetails['data']['metadata'];
             $orderId = $metadata['order_id'] ?? null;
             $amount = $paymentDetails['data']['amount'] / 100;
-            $transactionId = $paymentDetails['data']['reference'];
+            $transactionId = $paymentDetails['data']['reference']; // ✅ unique
 
             if ($orderId) {
-                // Check if payment already exists
-                $existingPayment = Payment::where('transaction_id', $transactionId)->first();
+                $order = Order::find($orderId);
 
-                if (!$existingPayment) {
-                    // Record payment
+                // Prevent duplicate transaction_id
+                if (!Payment::where('transaction_id', $transactionId)->exists()) {
                     Payment::create([
                         'order_id'       => $orderId,
-                        'user_id'        => $request->user()->id ?? null,
+                        'user_id'        => $order->user_id, // link to order owner
                         'amount'         => $amount,
                         'status'         => 'paid',
                         'payment_method' => 'Paystack',
@@ -86,22 +86,19 @@ class PaymentController extends Controller
                         'paid_at'        => now(),
                     ]);
 
-                    // Update order status
-                    $order = Order::find($orderId);
-                    if ($order) {
-                        $order->update(['status' => 'confirmed']);
-                    }
+                    $order->update(['status' => 'confirmed']);
                 }
             }
 
             return response()->json([
                 'message' => 'Payment successful',
-                'data' => $paymentDetails
+                'data'    => $paymentDetails
             ]);
         }
 
         return response()->json(['error' => 'Payment failed'], 400);
     }
+
 
     /**
      * Store a newly created payment for an order (manual entry).
@@ -113,10 +110,8 @@ class PaymentController extends Controller
         $validator = Validator::make($request->all(), [
             'order_id'       => 'required|exists:orders,id',
             'amount'         => 'required|numeric|min:0',
-            'status'         => 'in:unpaid,paid,pending,failed',
+            'status'         => 'in:unpaid,pending', // ✅ no 'paid' here
             'payment_method' => 'nullable|string',
-            'transaction_id' => 'required_if:status,paid|nullable|string|unique:payments,transaction_id',
-            'paid_at'        => 'nullable|date',
             'notes'          => 'nullable|string',
         ]);
 
@@ -133,37 +128,21 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Amount must match order total_price'], 400);
         }
 
-        $data = $request->only(['amount', 'status', 'payment_method', 'transaction_id', 'notes']);
-        if ($request->status === 'paid') {
-            if (empty($data['transaction_id'])) {
-                return response()->json(['error' => 'Transaction ID is required for paid status'], 422);
-            }
-            $data['paid_at'] = $request->paid_at ?? now();
-        }
-
         $payment = Payment::create([
             'order_id'       => $order->id,
             'user_id'        => $user->id,
-            'amount'         => $data['amount'],
-            'status'         => $data['status'] ?? 'unpaid',
-            'payment_method' => $data['payment_method'],
-            'transaction_id' => $data['transaction_id'],
-            'paid_at'        => $request->input('status') === 'paid' ? now() : null,
-            'notes'          => $data['notes'],
+            'amount'         => $request->amount,
+            'status'         => $request->status ?? 'unpaid',
+            'payment_method' => $request->payment_method,
+            'notes'          => $request->notes,
         ]);
 
-        if ($data['status'] === 'paid') {
-            $order->update(['status' => 'confirmed']);
-            if ($order->vegetable_request_id) {
-                $order->vegetableRequest()->update(['status' => 'processing']);
-            }
-        }
-
         return response()->json([
-            'message' => 'Payment created successfully',
+            'message' => 'Manual/Offline Payment recorded successfully',
             'payment' => new PaymentResource($payment->load('order')),
         ], 201);
     }
+
 
     /**
      * Display the specified payment.

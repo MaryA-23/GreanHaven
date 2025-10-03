@@ -61,15 +61,14 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
 
 Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
+    // Manual / Offline Payments
     Route::get('/', [PaymentController::class, 'index']);                  // List user payments
-    Route::post('/', [PaymentController::class, 'store']);                 // Create manual payment
+    Route::post('/', [PaymentController::class, 'store']);                 // Create manual payment (unpaid/pending)
     Route::get('/{payment}', [PaymentController::class, 'show']);          // Show a single payment
     Route::patch('/{payment}', [PaymentController::class, 'update']);      // Update a payment
     Route::delete('/{payment}', [PaymentController::class, 'destroy']);    // Delete a payment
 
-    // Paystack routes
-    Route::post('/paystack/pay', [PaymentController::class, 'initialize']); // Initialize Paystack payment
-    Route::get('/paystack/callback', [PaymentController::class, 'callback']); // Paystack callback
+    // Paystack Payments
+    Route::post('/paystack/pay', [PaymentController::class, 'initialize']);  // Start Paystack payment
+    Route::get('/paystack/callback', [PaymentController::class, 'callback']); // Handle Paystack callback
 });
-
-
