@@ -9,6 +9,7 @@ use App\Http\Resources\PaymentResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
+use Unicodeveloper\Paystack\Facades\Paystack;
 
 class PaymentController extends Controller
 {
@@ -22,6 +23,79 @@ class PaymentController extends Controller
             ->paginate(10);
 
         return response()->json($payments);
+    }
+
+    /**
+     * Redirect user to Paystack payment page.
+     */
+    public function redirectToGateway(Request $request)
+    {
+        $request->validate([
+            'order_id' => 'required|exists:orders,id',
+        ]);
+
+        $order = Order::findOrFail($request->order_id);
+
+        // Authorization: user must own the order
+        if ($order->user_id !== $request->user()->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        // Prepare metadata (extra info you want back)
+        $metadata = [
+            'order_id' => $order->id,
+            'user_id'  => $request->user()->id,
+        ];
+
+        // Set Paystack request details
+        return Paystack::getAuthorizationUrl([
+            'amount' => $order->total_price * 100, // Paystack expects amount in kobo
+            'email'  => $request->user()->email,
+            'metadata' => $metadata,
+        ])->redirectNow();
+    }
+
+      /**
+     * Handle Paystack callback after payment.
+     */
+    public function handleGatewayCallback(Request $request)
+    {
+        $paymentDetails = Paystack::getPaymentData();
+
+        if (!$paymentDetails['status']) {
+            return response()->json(['error' => 'Payment failed'], 400);
+        }
+
+        $data = $paymentDetails['data'];
+
+        $orderId = $data['metadata']['order_id'];
+        $userId  = $data['metadata']['user_id'];
+
+        $order = Order::findOrFail($orderId);
+
+        // Create or update payment record
+        $payment = Payment::updateOrCreate(
+            ['transaction_id' => $data['reference']],
+            [
+                'order_id'       => $order->id,
+                'user_id'        => $userId,
+                'amount'         => $data['amount'] / 100, // convert back to naira/cedis
+                'status'         => $data['status'] === 'success' ? 'paid' : 'failed',
+                'payment_method' => 'Paystack',
+                'transaction_id' => $data['reference'],
+                'paid_at'        => now(),
+            ]
+        );
+
+        // Update order status if payment succeeded
+        if ($payment->status === 'paid') {
+            $order->update(['status' => 'confirmed']);
+        }
+
+        return response()->json([
+            'message' => 'Payment processed successfully',
+            'payment' => new PaymentResource($payment->load('order'))
+        ]);
     }
 
     /**

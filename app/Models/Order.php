@@ -42,4 +42,10 @@ class Order extends Model
         return $this->payment?->status ?? 'unpaid';
     }
 
+    public function vegetableRequest()
+    {
+        return $this->belongsTo(VegetableRequest::class);
+    }
+
+
 }

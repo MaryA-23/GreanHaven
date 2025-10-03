@@ -15,4 +15,10 @@ class VegetableRequest extends Model
     {
         return $this->belongsTo(Vegetable::class);
     }
+
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
+
 }
