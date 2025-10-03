@@ -26,39 +26,39 @@ class PaymentController extends Controller
     }
 
     /**
-     * Redirect user to Paystack payment page.
+     * Initialize a payment and get Paystack authorization URL.
      */
-     // Initialize a payment and get Paystack authorization URL
- public function initialize(Request $request)
-{
-    $request->validate([
-        'order_id' => 'required|exists:orders,id',
-    ]);
-
-    $order = Order::with('user')->findOrFail($request->order_id);
-
-    $paymentData = [
-        'amount' => $order->total_price * 100,
-        'email' => $order->user->email,
-        'metadata' => ['order_id' => $order->id],
-    ];
-
-    try {
-        $authorization = Paystack::getAuthorizationUrl($paymentData);
-
-        // Instead of redirecting, just return the URL
-        return response()->json([
-            'authorization_url' => $authorization->url
+    public function initialize(Request $request)
+    {
+        $request->validate([
+            'order_id' => 'required|exists:orders,id',
         ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'error' => 'Payment initialization failed',
-            'message' => $e->getMessage()
-        ], 500);
+
+        $order = Order::with('user')->findOrFail($request->order_id);
+
+        $paymentData = [
+            'amount' => $order->total_price * 100, // Paystack expects amount in kobo
+            'email' => $order->user->email,
+            'metadata' => ['order_id' => $order->id],
+        ];
+
+        try {
+            $authorization = Paystack::getAuthorizationUrl($paymentData);
+
+            return response()->json([
+                'authorization_url' => $authorization->url
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Payment initialization failed',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
-}
 
-
+    /**
+     * Paystack callback to verify payment.
+     */
     // Paystack callback to verify payment
     public function callback(Request $request)
     {
@@ -68,19 +68,30 @@ class PaymentController extends Controller
             $metadata = $paymentDetails['data']['metadata'];
             $orderId = $metadata['order_id'] ?? null;
             $amount = $paymentDetails['data']['amount'] / 100;
+            $transactionId = $paymentDetails['data']['reference'];
 
             if ($orderId) {
-                // Record payment in payments table
-                Payment::create([
-                    'order_id' => $orderId,
-                    'amount' => $amount,
-                    'status' => 'paid',
-                    'payment_method' => 'Paystack',
-                ]);
+                // Check if payment already exists
+                $existingPayment = Payment::where('transaction_id', $transactionId)->first();
 
-                // Optionally, update order status
-                $order = Order::find($orderId);
-                $order->update(['status' => 'confirmed']);
+                if (!$existingPayment) {
+                    // Record payment
+                    Payment::create([
+                        'order_id'       => $orderId,
+                        'user_id'        => $request->user()->id ?? null,
+                        'amount'         => $amount,
+                        'status'         => 'paid',
+                        'payment_method' => 'Paystack',
+                        'transaction_id' => $transactionId,
+                        'paid_at'        => now(),
+                    ]);
+
+                    // Update order status
+                    $order = Order::find($orderId);
+                    if ($order) {
+                        $order->update(['status' => 'confirmed']);
+                    }
+                }
             }
 
             return response()->json([
@@ -93,7 +104,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Store a newly created payment for an order.
+     * Store a newly created payment for an order (manual entry).
      */
     public function store(Request $request): JsonResponse
     {
@@ -104,7 +115,7 @@ class PaymentController extends Controller
             'amount'         => 'required|numeric|min:0',
             'status'         => 'in:unpaid,paid,pending,failed',
             'payment_method' => 'nullable|string',
-            'transaction_id' => 'required_if:status,paid|nullable|string', // Enforce for 'paid'
+            'transaction_id' => 'required_if:status,paid|nullable|string|unique:payments,transaction_id',
             'paid_at'        => 'nullable|date',
             'notes'          => 'nullable|string',
         ]);
@@ -113,24 +124,21 @@ class PaymentController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Verify order ownership
         $order = Order::find($request->order_id);
         if ($order->user_id !== $user->id) {
             return response()->json(['error' => 'Unauthorized: You do not own this order'], 403);
         }
 
-        // Ensure amount matches order total_price
         if ($request->amount != $order->total_price) {
             return response()->json(['error' => 'Amount must match order total_price'], 400);
         }
 
-        // Auto-set paid_at and validate for 'paid' status
         $data = $request->only(['amount', 'status', 'payment_method', 'transaction_id', 'notes']);
         if ($request->status === 'paid') {
             if (empty($data['transaction_id'])) {
                 return response()->json(['error' => 'Transaction ID is required for paid status'], 422);
             }
-            $data['paid_at'] = $request->paid_at ?? now(); // Auto-set if not provided
+            $data['paid_at'] = $request->paid_at ?? now();
         }
 
         $payment = Payment::create([
@@ -140,25 +148,20 @@ class PaymentController extends Controller
             'status'         => $data['status'] ?? 'unpaid',
             'payment_method' => $data['payment_method'],
             'transaction_id' => $data['transaction_id'],
-            'paid_at' => $request->input('status') === 'paid' ? now() : null,
+            'paid_at'        => $request->input('status') === 'paid' ? now() : null,
             'notes'          => $data['notes'],
         ]);
 
-        // Update order status if paid
         if ($data['status'] === 'paid') {
             $order->update(['status' => 'confirmed']);
-        
-            // If this order came from a vegetable request, update its status too
             if ($order->vegetable_request_id) {
                 $order->vegetableRequest()->update(['status' => 'processing']);
             }
         }
-        
 
-        // Use Resource for formatted response
         return response()->json([
             'message' => 'Payment created successfully',
-            'payment' => new PaymentResource($payment->load('order')), // Wrap in resource
+            'payment' => new PaymentResource($payment->load('order')),
         ], 201);
     }
 
@@ -167,7 +170,6 @@ class PaymentController extends Controller
      */
     public function show(Request $request, Payment $payment): JsonResponse
     {
-        // Authorization: user must own the payment
         if ($payment->user_id !== $request->user()->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
@@ -180,18 +182,17 @@ class PaymentController extends Controller
      */
     public function update(Request $request, Payment $payment): JsonResponse
     {
-        // Authorization: user must own the payment
         if ($payment->user_id !== $request->user()->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         $validator = Validator::make($request->all(), [
-            'amount' => 'sometimes|numeric|min:0',
-            'status' => 'sometimes|in:unpaid,paid,pending,failed',
+            'amount'         => 'sometimes|numeric|min:0',
+            'status'         => 'sometimes|in:unpaid,paid,pending,failed',
             'payment_method' => 'nullable|string',
-           'transaction_id' => 'required_if:status,paid|nullable|string|unique:payments,transaction_id',
-            'paid_at' => 'nullable|date',
-            'notes' => 'nullable|string',
+            'transaction_id' => 'required_if:status,paid|nullable|string|unique:payments,transaction_id,' . $payment->id,
+            'paid_at'        => 'nullable|date',
+            'notes'          => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -207,7 +208,6 @@ class PaymentController extends Controller
             'notes',
         ]));
 
-        // Optional: Update order status if payment marked paid
         if ($request->has('status') && $request->status === 'paid') {
             $payment->order->update(['status' => 'completed']);
         }
@@ -223,7 +223,6 @@ class PaymentController extends Controller
      */
     public function destroy(Request $request, Payment $payment): JsonResponse
     {
-        // Authorization: user must own the payment
         if ($payment->user_id !== $request->user()->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
