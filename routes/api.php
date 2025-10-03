@@ -60,16 +60,15 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 });
 
 
+// Assuming you have routes for orders already
 Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
-    Route::get('/', [PaymentController::class, 'index']);                  // List user payments
-    Route::post('/', [PaymentController::class, 'store']);                 // Create manual payment
-    Route::get('/{payment}', [PaymentController::class, 'show']);          // Show a single payment
-    Route::patch('/{payment}', [PaymentController::class, 'update']);      // Update a payment
-    Route::delete('/{payment}', [PaymentController::class, 'destroy']);    // Delete a payment
-
-    // Paystack routes
-    Route::post('/paystack/pay', [PaymentController::class, 'initialize']); // Initialize Paystack payment
-    Route::get('/paystack/callback', [PaymentController::class, 'callback']); // Paystack callback
+    Route::get('/', [PaymentController::class, 'index']); // List user payments
+    Route::post('/order/{order}', [PaymentController::class, 'store']); // Create payment for order
+    Route::get('/order/{order}', [PaymentController::class, 'show']); // Show payment for order
+    Route::patch('/{payment}/status', [PaymentController::class, 'updateStatus']); // Update payment status
+    Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
+    Route::get('/paystack/callback', [PaymentController::class, 'callback']);
 });
+
 
 
