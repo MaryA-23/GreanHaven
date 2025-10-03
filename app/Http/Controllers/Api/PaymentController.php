@@ -59,59 +59,48 @@ class PaymentController extends Controller
     /**
      * Paystack callback to verify payment.
      */
+    // Paystack callback to verify payment
     public function callback(Request $request)
     {
-        try {
-            $paymentDetails = Paystack::getPaymentData();
+        $paymentDetails = Paystack::getPaymentData();
 
-            if ($paymentDetails['data']['status'] === 'success') {
-                $metadata = $paymentDetails['data']['metadata'];
-                $orderId = $metadata['order_id'] ?? null;
-                $amount = $paymentDetails['data']['amount'] / 100;
-                $reference = $paymentDetails['data']['reference'];
+        if ($paymentDetails['data']['status'] === 'success') {
+            $metadata = $paymentDetails['data']['metadata'];
+            $orderId = $metadata['order_id'] ?? null;
+            $amount = $paymentDetails['data']['amount'] / 100;
+            $transactionId = $paymentDetails['data']['reference'];
 
-                if ($orderId) {
-                    // Check if payment already recorded
-                    $payment = Payment::where('transaction_id', $reference)->first();
+            if ($orderId) {
+                // Check if payment already exists
+                $existingPayment = Payment::where('transaction_id', $transactionId)->first();
 
-                    if (!$payment) {
-                        $order = Order::findOrFail($orderId);
+                if (!$existingPayment) {
+                    // Record payment
+                    Payment::create([
+                        'order_id'       => $orderId,
+                        'user_id'        => $request->user()->id ?? null,
+                        'amount'         => $amount,
+                        'status'         => 'paid',
+                        'payment_method' => 'Paystack',
+                        'transaction_id' => $transactionId,
+                        'paid_at'        => now(),
+                    ]);
 
-                        // Record new payment
-                        $payment = Payment::create([
-                            'order_id'       => $orderId,
-                            'user_id'        => $order->user_id,
-                            'amount'         => $amount,
-                            'status'         => 'paid',
-                            'payment_method' => 'Paystack',
-                            'transaction_id' => $reference,
-                            'paid_at'        => now(),
-                        ]);
-
-                        // Update order status
+                    // Update order status
+                    $order = Order::find($orderId);
+                    if ($order) {
                         $order->update(['status' => 'confirmed']);
-
-                        // If this order came from a vegetable request, update its status too
-                        if ($order->vegetable_request_id) {
-                            $order->vegetableRequest()->update(['status' => 'processing']);
-                        }
                     }
                 }
-
-                return response()->json([
-                    'message' => 'Payment verified successfully',
-                    'payment' => new PaymentResource($payment ?? null),
-                    'data'    => $paymentDetails
-                ]);
             }
 
-            return response()->json(['error' => 'Payment failed'], 400);
-        } catch (\Exception $e) {
             return response()->json([
-                'error' => 'Payment verification failed',
-                'message' => $e->getMessage()
-            ], 500);
+                'message' => 'Payment successful',
+                'data' => $paymentDetails
+            ]);
         }
+
+        return response()->json(['error' => 'Payment failed'], 400);
     }
 
     /**
