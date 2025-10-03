@@ -58,45 +58,45 @@ class PaymentController extends Controller
       /**
      * Handle Paystack callback after payment.
      */
-    public function handleGatewayCallback(Request $request)
-    {
+    public function handleGatewayCallback()
+{
+    try {
         $paymentDetails = Paystack::getPaymentData();
 
-        if (!$paymentDetails['status']) {
-            return response()->json(['error' => 'Payment failed'], 400);
-        }
+        $status = $paymentDetails['data']['status'];
+        $reference = $paymentDetails['data']['reference'];
+        $amount = $paymentDetails['data']['amount'] / 100; // Paystack stores in kobo
+        $orderId = $paymentDetails['data']['metadata']['order_id'] ?? null;
+        $transactionId = $paymentDetails['data']['id'];
 
-        $data = $paymentDetails['data'];
-
-        $orderId = $data['metadata']['order_id'];
-        $userId  = $data['metadata']['user_id'];
-
-        $order = Order::findOrFail($orderId);
-
-        // Create or update payment record
-        $payment = Payment::updateOrCreate(
-            ['transaction_id' => $data['reference']],
-            [
-                'order_id'       => $order->id,
-                'user_id'        => $userId,
-                'amount'         => $data['amount'] / 100, // convert back to naira/cedis
-                'status'         => $data['status'] === 'success' ? 'paid' : 'failed',
+        if ($status === 'success' && $orderId) {
+            // Save payment
+            $payment = Payment::create([
+                'order_id'       => $orderId,
+                'user_id'        => auth()->id() ?? null,
+                'amount'         => $amount,
+                'status'         => 'paid',
                 'payment_method' => 'Paystack',
-                'transaction_id' => $data['reference'],
+                'transaction_id' => $transactionId,
                 'paid_at'        => now(),
-            ]
-        );
+                'notes'          => 'Payment successful',
+            ]);
 
-        // Update order status if payment succeeded
-        if ($payment->status === 'paid') {
-            $order->update(['status' => 'confirmed']);
+            // Update order status
+            Order::where('id', $orderId)->update(['status' => 'completed']);
+
+            // ✅ Redirect back to Angular with success
+            return redirect()->away(config('app.frontend_url')."/payment-success?order_id={$orderId}&payment_id={$payment->id}");
         }
 
-        return response()->json([
-            'message' => 'Payment processed successfully',
-            'payment' => new PaymentResource($payment->load('order'))
-        ]);
+        // ❌ Redirect back to Angular with failure
+        return redirect()->away(config('app.frontend_url')."/payment-failed?reference={$reference}");
+
+    } catch (\Exception $e) {
+        return redirect()->away(config('app.frontend_url')."/payment-failed?error=" . urlencode($e->getMessage()));
     }
+}
+
 
     /**
      * Store a newly created payment for an order.

@@ -69,5 +69,5 @@ Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
     
     // Paystack integration
     Route::post('/pay', [PaymentController::class, 'redirectToGateway'])->name('pay');
-    Route::get('/callback', [PaymentController::class, 'handleGatewayCallback'])->name('payment.callback');
 });
+ Route::get('/callback', [PaymentController::class, 'handleGatewayCallback'])->name('payment.callback');
