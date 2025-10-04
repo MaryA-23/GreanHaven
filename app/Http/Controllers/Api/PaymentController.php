@@ -61,87 +61,130 @@ class PaymentController extends Controller
      */
     // Paystack callback to verify payment
    // Paystack callback to verify payment
-    public function callback(Request $request)
-    {
-        $paymentDetails = Paystack::getPaymentData();
 
-        if ($paymentDetails['data']['status'] === 'success') {
-            $metadata = $paymentDetails['data']['metadata'];
-            $orderId = $metadata['order_id'] ?? null;
-            $amount = $paymentDetails['data']['amount'] / 100;
-            $transactionId = $paymentDetails['data']['reference']; // ✅ unique
+   private function recordPayment($order, $amount, $transactionId, $method = 'Paystack')
+{
+    // Prevent duplicate payments
+    if (Payment::where('transaction_id', $transactionId)->exists()) {
+        return;
+    }
 
-            if ($orderId) {
-                $order = Order::find($orderId);
+    Payment::create([
+        'order_id'       => $order->id,
+        'user_id'        => $order->user_id,
+        'amount'         => $amount,
+        'status'         => 'paid',
+        'payment_method' => $method,
+        'transaction_id' => $transactionId,
+        'paid_at'        => now(),
+    ]);
 
-                // Prevent duplicate transaction_id
-                if (!Payment::where('transaction_id', $transactionId)->exists()) {
-                    Payment::create([
-                        'order_id'       => $orderId,
-                        'user_id'        => $order->user_id, // link to order owner
-                        'amount'         => $amount,
-                        'status'         => 'paid',
-                        'payment_method' => 'Paystack',
-                        'transaction_id' => $transactionId,
-                        'paid_at'        => now(),
-                    ]);
+    // ✅ Update order
+    $order->update(['status' => 'confirmed']);
 
-                    $order->update(['status' => 'confirmed']);
-                }
+    // ✅ If linked to vegetable request
+    if ($order->vegetable_request_id) {
+        $order->vegetableRequest()->update(['status' => 'processing']);
+    }
+}
+  public function callback(Request $request)
+{
+    $paymentDetails = Paystack::getPaymentData();
+    $data = $paymentDetails['data'] ?? null; // ✅ safe shorthand
+
+    if ($data && $data['status'] === 'success') {
+        $orderId       = $data['metadata']['order_id'] ?? null;
+        $amount        = $data['amount'] / 100;
+        $transactionId = $data['reference']; // ✅ unique Paystack reference
+
+        if ($orderId) {
+            $order = Order::find($orderId);
+
+            // prevent duplicate transactions
+            $existingPayment = Payment::where('transaction_id', $transactionId)->first();
+            if (!$existingPayment) {
+                $this->recordPayment($order, $amount, $transactionId, 'Paystack');
             }
 
-            return response()->json([
-                'message' => 'Payment successful',
-                'data'    => $paymentDetails
-            ]);
+            // update order status
+            $order->update(['status' => 'confirmed']);
+
+            // if linked to a vegetable request, update it too
+            if ($order->vegetable_request_id) {
+                $order->vegetableRequest()->update(['status' => 'processing']);
+            }
         }
 
-        return response()->json(['error' => 'Payment failed'], 400);
+        return response()->json([
+            'message' => 'Payment successful',
+            'data'    => $data
+        ]);
     }
+
+    return response()->json(['error' => 'Payment failed'], 400);
+}
+
 
 
     /**
      * Store a newly created payment for an order (manual entry).
      */
-    public function store(Request $request): JsonResponse
-    {
-        $user = $request->user();
+   public function store(Request $request): JsonResponse
+{
+    $user = $request->user();
 
-        $validator = Validator::make($request->all(), [
-            'order_id'       => 'required|exists:orders,id',
-            'amount'         => 'required|numeric|min:0',
-            'status'         => 'in:unpaid,pending', // ✅ no 'paid' here
-            'payment_method' => 'nullable|string',
-            'notes'          => 'nullable|string',
-        ]);
+    $validator = Validator::make($request->all(), [
+        'order_id'       => 'required|exists:orders,id',
+        'amount'         => 'required|numeric|min:0',
+        'status'         => 'in:unpaid,paid,pending,failed',
+        'payment_method' => 'nullable|string',
+        'transaction_id' => 'nullable|string|unique:payments,transaction_id', // not strictly required
+        'paid_at'        => 'nullable|date',
+        'notes'          => 'nullable|string',
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        $order = Order::find($request->order_id);
-        if ($order->user_id !== $user->id) {
-            return response()->json(['error' => 'Unauthorized: You do not own this order'], 403);
-        }
-
-        if ($request->amount != $order->total_price) {
-            return response()->json(['error' => 'Amount must match order total_price'], 400);
-        }
-
-        $payment = Payment::create([
-            'order_id'       => $order->id,
-            'user_id'        => $user->id,
-            'amount'         => $request->amount,
-            'status'         => $request->status ?? 'unpaid',
-            'payment_method' => $request->payment_method,
-            'notes'          => $request->notes,
-        ]);
-
-        return response()->json([
-            'message' => 'Manual/Offline Payment recorded successfully',
-            'payment' => new PaymentResource($payment->load('order')),
-        ], 201);
+    if ($validator->fails()) {
+        return response()->json(['errors' => $validator->errors()], 422);
     }
+
+    $order = Order::find($request->order_id);
+    if ($order->user_id !== $user->id) {
+        return response()->json(['error' => 'Unauthorized: You do not own this order'], 403);
+    }
+
+    if ($request->amount != $order->total_price) {
+        return response()->json(['error' => 'Amount must match order total_price'], 400);
+    }
+
+    $data = $request->only(['amount', 'status', 'payment_method', 'transaction_id', 'notes']);
+    if ($request->status === 'paid') {
+        $data['paid_at'] = $request->paid_at ?? now();
+    }
+
+    $payment = Payment::create([
+        'order_id'       => $order->id,
+        'user_id'        => $user->id,
+        'amount'         => $data['amount'],
+        'status'         => $data['status'] ?? 'unpaid',
+        'payment_method' => $data['payment_method'],
+        'transaction_id' => $data['transaction_id'] ?? null, // allow null here
+        'paid_at'        => $data['paid_at'] ?? null,
+        'notes'          => $data['notes'],
+    ]);
+
+    if ($data['status'] === 'paid') {
+        $order->update(['status' => 'confirmed']);
+
+        if ($order->vegetable_request_id) {
+            $order->vegetableRequest()->update(['status' => 'processing']);
+        }
+    }
+
+    return response()->json([
+        'message' => 'Payment created successfully',
+        'payment' => new PaymentResource($payment->load('order')),
+    ], 201);
+}
 
 
     /**

@@ -60,15 +60,17 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 });
 
 
+// Authenticated routes (user must be logged in)
 Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
-    // Manual / Offline Payments
-    Route::get('/', [PaymentController::class, 'index']);                  // List user payments
-    Route::post('/', [PaymentController::class, 'store']);                 // Create manual payment (unpaid/pending)
-    Route::get('/{payment}', [PaymentController::class, 'show']);          // Show a single payment
-    Route::patch('/{payment}', [PaymentController::class, 'update']);      // Update a payment
-    Route::delete('/{payment}', [PaymentController::class, 'destroy']);    // Delete a payment
+    Route::get('/', [PaymentController::class, 'index']);        // List user payments
+    Route::post('/', [PaymentController::class, 'store']);       // Create manual payment
+    Route::get('/{payment}', [PaymentController::class, 'show']); // Show a single payment
+    Route::patch('/{payment}', [PaymentController::class, 'update']); // Update a payment
+    Route::delete('/{payment}', [PaymentController::class, 'destroy']); // Delete a payment
 
-    // Paystack Payments
-    Route::post('/paystack/pay', [PaymentController::class, 'initialize']);  // Start Paystack payment
-    Route::get('/paystack/callback', [PaymentController::class, 'callback']); // Handle Paystack callback
+    // Initialize Paystack (user action, so keep inside auth)
+    Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
 });
+
+// Public routes (Paystack server calls this directly, no auth needed)
+Route::get('/payments/paystack/callback', [PaymentController::class, 'callback']);
