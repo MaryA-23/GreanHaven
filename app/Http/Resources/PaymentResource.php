@@ -16,7 +16,7 @@ class PaymentResource extends JsonResource
             'amount' => $this->amount,
             'status' => $this->status,
             'payment_method' => $this->payment_method,
-            'transaction_id' => $this->transaction_id,
+            'gateway_reference' => $this->gateway_reference,
             'paid_at' => $this->paid_at ? $this->paid_at->toDateTimeString() : null,
             'notes' => $this->notes,
             'created_at' => $this->created_at->toDateTimeString(),
