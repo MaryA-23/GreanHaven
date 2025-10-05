@@ -18,12 +18,26 @@ class OrderController extends Controller
     /**
      * List all orders (admins see all, users see only theirs).
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request)
     {
-        $query = Order::with('items.vegetable');
+        $user = $request->user();
 
-        if ($request->user()->role !== 'admin') {
-            $query->where('user_id', $request->user()->id);
+        $query = Order::with('items.vegetable'); // eager load items & vegetables
+
+        if ($user->role === 'admin') {
+            // Admin sees all orders
+        } elseif ($user->role === 'company') {
+            $query->where('company_id', $user->company_id);
+        } else { // normal user
+            $query->where('user_id', $user->id);
+        }
+
+        // Optional: filter by date if needed
+        if ($request->date_from) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->date_to) {
+            $query->whereDate('created_at', '<=', $request->date_to);
         }
 
         $orders = $query->paginate(10);

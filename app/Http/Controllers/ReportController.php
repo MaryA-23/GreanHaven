@@ -44,27 +44,29 @@ class ReportController extends Controller
     // Sales summary with optional date/company filter
     public function salesSummary(Request $request)
     {
-        $query = Payment::where('status', 'paid');
+        $user = $request->user();
+        $query = Order::query();
 
-        if ($request->company_id) {
-            $query->whereHas('order', fn($q) => $q->where('company_id', $request->company_id));
+        if ($user->role === 'company') {
+            $query->where('company_id', $user->company_id);
+        } elseif ($user->role === 'user') {
+            $query->where('user_id', $user->id);
         }
 
+        // Optional date filters
         if ($request->date_from) {
             $query->whereDate('created_at', '>=', $request->date_from);
         }
-
         if ($request->date_to) {
             $query->whereDate('created_at', '<=', $request->date_to);
         }
 
-        $summary = [
-            'total_revenue' => $query->sum('amount'),
-            'total_payments' => $query->count(),
-        ];
-
-        return response()->json($summary);
+        return response()->json([
+            'total_sales' => $query->sum('total_price'),
+            'total_orders' => $query->count(),
+        ]);
     }
+
 
     // Payments summary with optional date/company filter
     public function paymentsSummary(Request $request)

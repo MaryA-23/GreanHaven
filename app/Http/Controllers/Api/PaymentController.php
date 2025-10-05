@@ -18,14 +18,38 @@ class PaymentController extends Controller
     /**
      * Display a listing of the authenticated user's payments.
      */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request)
     {
-        $payments = Payment::with('order')
-            ->where('user_id', $request->user()->id)
-            ->paginate(10);
+        $user = $request->user();
 
-        return response()->json($payments);
+        $query = Payment::with('order'); // eager load order
+
+        if ($user->role === 'admin') {
+            // Admin sees all payments
+        } elseif ($user->role === 'company') {
+            $query->whereHas('order', function ($q) use ($user) {
+                $q->where('company_id', $user->company_id);
+            });
+        } else {
+            $query->where('user_id', $user->id);
+        }
+
+        // Optional: filter by date
+        if ($request->date_from) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->date_to) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        $payments = $query->paginate(10);
+
+        return response()->json([
+            'success' => true,
+            'data' => $payments,
+        ]);
     }
+
 
     /**
      * Initialize a payment and get Paystack authorization URL.

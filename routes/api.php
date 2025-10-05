@@ -52,33 +52,60 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
   });
 
-  Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
-    Route::get('/', [OrderController::class, 'index']);          // List all orders
-    Route::post('/', [OrderController::class, 'store']);         // Create new order
-    Route::get('/{id}', [OrderController::class, 'show']);       // Show single order
-    Route::patch('/{id}/status', [OrderController::class, 'update'])->middleware('can:admin'); // Update order status
-    Route::delete('/{id}', [OrderController::class, 'destroy'])->middleware('can:admin'); // Delete order
+// Orders routes
+Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
+    // Normal users: can place orders & view only their own
+    Route::middleware('role:user')->group(function () {
+        Route::post('/', [OrderController::class, 'store']);      // Place order
+        Route::get('/my', [OrderController::class, 'index']);    // Only their orders
+        Route::get('/{id}', [OrderController::class, 'show']);   // View single order (owned)
+    });
+    // Company: can view only company orders
+    Route::middleware('role:company')->group(function () {
+        Route::get('/company', [OrderController::class, 'index']); // Company orders
+    });
+    // Admin: can view all orders, update, delete
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/', [OrderController::class, 'index']);            // All orders
+        Route::patch('/{id}/status', [OrderController::class, 'update']);  // Update order status
+        Route::delete('/{id}', [OrderController::class, 'destroy']);       // Delete order
+    });
 });
 
 
-// Authenticated routes (user must be logged in)
-Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
-    Route::get('/', [PaymentController::class, 'index']);        // List user payments
-    Route::post('/', [PaymentController::class, 'store']);       // Create manual payment
-    Route::get('/{payment}', [PaymentController::class, 'show']); // Show a single payment
-    Route::patch('/{payment}', [PaymentController::class, 'update']); // Update a payment
-    Route::delete('/{payment}', [PaymentController::class, 'destroy']); // Delete a payment
 
-    // Initialize Paystack (user action, so keep inside auth)
+// Payments routes
+Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
+    // Normal users: only their payments
+    Route::middleware('role:user')->get('/my', [PaymentController::class, 'index']);
+    // Company: payments related to their company orders
+    Route::middleware('role:company')->get('/company', [PaymentController::class, 'index']);
+    // Admin: all payments
+    Route::middleware('role:admin')->get('/', [PaymentController::class, 'index']);
+    // Common authenticated actions
+    Route::post('/', [PaymentController::class, 'store']);        // Create manual payment
+    Route::get('/{payment}', [PaymentController::class, 'show']); // View single payment
+    Route::patch('/{payment}', [PaymentController::class, 'update']); // Update payment
+    Route::delete('/{payment}', [PaymentController::class, 'destroy']); // Delete payment
+    // Initialize Paystack payment (authenticated)
     Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
 });
-
-// Public routes (Paystack server calls this directly, no auth needed)
+// Public callback from Paystack (no auth)
 Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback']);
 
-Route::middleware(['auth:sanctum', 'can:viewReports'])->prefix('reports')->group(function () {
-    Route::get('/orders', [ReportController::class, 'ordersSummary']);
-    Route::get('/sales', [ReportController::class, 'salesSummary']);
-    Route::get('/payments', [ReportController::class, 'paymentsSummary']);
+
+
+// Reports routes
+Route::prefix('reports')->middleware('auth:sanctum')->group(function () {
+    // Normal users: only their sales summary
+    Route::middleware('role:user')->get('/my-sales', [ReportController::class, 'salesSummary']);
+    // Company: sales summary for company orders
+    Route::middleware('role:company')->get('/company-sales', [ReportController::class, 'salesSummary']);
+    // Admin: all reports
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/orders', [ReportController::class, 'ordersSummary']);
+        Route::get('/sales', [ReportController::class, 'salesSummary']);
+        Route::get('/payments', [ReportController::class, 'paymentsSummary']);
+    });
 });
 
