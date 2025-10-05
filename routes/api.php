@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\PaymentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\VegetableController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\VegetableRequestController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrderController;
@@ -74,3 +75,10 @@ Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
 
 // Public routes (Paystack server calls this directly, no auth needed)
 Route::get('/payments/paystack/callback', [PaymentController::class, 'callback']);
+
+Route::middleware(['auth:sanctum', 'can:viewReports'])->prefix('reports')->group(function () {
+    Route::get('/orders', [ReportController::class, 'ordersSummary']);
+    Route::get('/sales', [ReportController::class, 'salesSummary']);
+    Route::get('/payments', [ReportController::class, 'paymentsSummary']);
+});
+
