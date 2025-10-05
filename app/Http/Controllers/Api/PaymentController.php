@@ -88,34 +88,47 @@ class PaymentController extends Controller
     /**
      * Paystack callback to verify payment.
      */
-    public function callback(Request $request)
-    {
-        $paymentDetails = Paystack::getPaymentData();
+  public function callback(Request $request)
+{
+    $reference = $request->query('reference') ?? $request->input('reference');
+
+    if (!$reference) {
+        return response()->json(['error' => 'No transaction reference provided.'], 400);
+    }
+
+    try {
+        // Explicit verification with Paystack reference
+        $paymentDetails = Paystack::getPaymentData(); 
+        // Or: $paymentDetails = Paystack::verifyTransaction($reference);
+
         $data = $paymentDetails['data'] ?? null;
 
         if ($data && $data['status'] === 'success') {
-            $orderId   = $data['metadata']['order_id'] ?? null;
-            $amount    = $data['amount'] / 100;
-            $reference = $data['reference']; // ✅ unique Paystack reference
+            $orderId       = $data['metadata']['order_id'] ?? null;
+            $amount        = $data['amount'] / 100;
+            $transactionId = $data['reference']; // ✅ always the Paystack reference
 
             if ($orderId) {
                 $order = Order::find($orderId);
-
-                // prevent duplicate transactions
-                $existingPayment = Payment::where('gateway_reference', $reference)->first();
-                if (!$existingPayment) {
-                    $this->recordPayment($order, $amount, $reference, 'Paystack');
-                }
-
-                return response()->json([
-                    'message' => 'Payment successful',
-                    'data'    => $data
-                ]);
+                $this->recordPayment($order, $amount, $transactionId, 'Paystack');
             }
+
+            return response()->json([
+                'message' => 'Payment successful',
+                'data'    => $data
+            ]);
         }
 
         return response()->json(['error' => 'Payment failed'], 400);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Verification failed',
+            'message' => $e->getMessage()
+        ], 500);
     }
+}
+
 
     /**
      * Store a newly created payment for an order (manual entry).
