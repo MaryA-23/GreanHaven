@@ -74,7 +74,7 @@ Route::middleware('auth:sanctum')->prefix('payments')->group(function () {
 });
 
 // Public routes (Paystack server calls this directly, no auth needed)
-Route::get('/payments/paystack/callback', [PaymentController::class, 'callback']);
+Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback']);
 
 Route::middleware(['auth:sanctum', 'can:viewReports'])->prefix('reports')->group(function () {
     Route::get('/orders', [ReportController::class, 'ordersSummary']);
