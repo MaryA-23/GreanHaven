@@ -81,7 +81,7 @@ class DemoSeeder extends Seeder
             'amount' => 21.50,
             'status' => 'success',
             'payment_method' => 'paystack',
-            'reference' => 'PAY-' . uniqid(),
+            'gateway_reference' => 'PAY-' . uniqid(),
         ]);
     }
 }
