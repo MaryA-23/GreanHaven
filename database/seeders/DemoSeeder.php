@@ -71,7 +71,7 @@ class DemoSeeder extends Seeder
         $order = Order::firstOrCreate([
             'user_id' => $user->id,
             'company_id' => $company->id,
-            'status' => 'paid',
+            'status' => 'confirmed',
         ]);
 
         // ✅ Sample payment for that order
