@@ -27,7 +27,7 @@ class DemoSeeder extends Seeder
         $company = Company::create([
             'name' => 'GreenFarm Ltd',
             'email' => 'greenfarm@example.com',
-            'phone' => '+233200000000',
+           
         ]);
 
 
