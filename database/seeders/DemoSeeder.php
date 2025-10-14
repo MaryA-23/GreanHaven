@@ -3,18 +3,18 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Models\Company;
 use App\Models\Vegetable;
 use App\Models\Order;
 use App\Models\Payment;
-use Illuminate\Support\Facades\Hash;
 
 class DemoSeeder extends Seeder
 {
     public function run(): void
     {
-        // ✅ Create admin only if not existing
+        // ✅ Create admin (has a role)
         $admin = User::firstOrCreate(
             ['email' => 'admin@example.com'],
             [
@@ -25,36 +25,34 @@ class DemoSeeder extends Seeder
             ]
         );
 
-        // ✅ Create a company
+        // ✅ Create a company (no role)
         $company = Company::firstOrCreate([
             'name' => 'GreenHaven Ltd.',
             'email' => 'info@greenhaven.com',
         ]);
 
-        // ✅ Create company user
+        // ✅ Create a company representative (no role)
         $companyUser = User::firstOrCreate(
             ['email' => 'company@example.com'],
             [
                 'first_name' => 'Company',
                 'last_name' => 'Rep',
-                'role' => 'company',
                 'company_id' => $company->id,
                 'password' => Hash::make('password'),
             ]
         );
 
-        // ✅ Create normal user
+        // ✅ Create a normal user (no role)
         $user = User::firstOrCreate(
             ['email' => 'user@example.com'],
             [
                 'first_name' => 'Mary',
                 'last_name' => 'Ayivor',
-                'role' => 'user',
                 'password' => Hash::make('password'),
             ]
         );
 
-        // ✅ Add some vegetables
+        // ✅ Add sample vegetables
         $veg1 = Vegetable::firstOrCreate([
             'name' => 'Tomato',
             'category' => 'Vegetable',
@@ -69,14 +67,14 @@ class DemoSeeder extends Seeder
             'description' => 'Organic carrots rich in vitamin A',
         ]);
 
-        // ✅ Sample orders
+        // ✅ Sample order (belongs to Mary)
         $order = Order::firstOrCreate([
             'user_id' => $user->id,
             'company_id' => $company->id,
             'status' => 'paid',
         ]);
 
-        // ✅ Sample payment
+        // ✅ Sample payment for that order
         Payment::firstOrCreate([
             'order_id' => $order->id,
             'user_id' => $user->id,
