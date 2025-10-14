@@ -28,7 +28,7 @@ class DemoSeeder extends Seeder
         // ✅ Create a company
         $company = Company::firstOrCreate([
             'name' => 'GreenHaven Ltd.',
-            'address' => 'Accra, Ghana',
+            'email' => 'info@greenhaven.com',
         ]);
 
         // ✅ Create company user
