@@ -27,16 +27,14 @@ class DemoSeeder extends Seeder
         $company = Company::create([
             'name' => 'GreenFarm Ltd',
             'email' => 'greenfarm@example.com',
-           
         ]);
 
 
         
         $companyUser = User::create([
-             'first_name' => 'Company',
+         'first_name' => 'Company',
         'last_name' => 'User',
         'email' => 'company@example.com',
-        'role' => 'company',
         'company_id' => $company->id,
         'password' => bcrypt('password'),
         ]);
@@ -46,7 +44,7 @@ class DemoSeeder extends Seeder
         'first_name' => 'Company',
         'last_name' => 'User',
         'email' => 'company@example.com',
-        'role' => 'company',
+        'role' => 'admin',
         'company_id' => $company->id,
         'password' => bcrypt('password'),
     ]);
