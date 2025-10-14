@@ -16,7 +16,8 @@ class DemoSeeder extends Seeder
     {
         // 🧑‍💼 Admin
         $admin = User::create([
-            'name' => 'Admin User',
+            'first_name' => 'Admin',
+             'last_name' => 'User',
             'email' => 'admin@example.com',
             'role' => 'admin',
             'password' => Hash::make('password'),
@@ -30,21 +31,26 @@ class DemoSeeder extends Seeder
             'phone' => '+233200000000',
         ]);
 
+
+        
         $companyUser = User::create([
-            'name' => 'Company Manager',
-            'email' => 'company@example.com',
-            'role' => 'company',
-            'company_id' => $company->id,
-            'password' => Hash::make('password'),
+             'first_name' => 'Company',
+        'last_name' => 'User',
+        'email' => 'company@example.com',
+        'role' => 'company',
+        'company_id' => $company->id,
+        'password' => bcrypt('password'),
         ]);
 
         // 👩‍🌾 Normal user
-        $user = User::create([
-            'name' => 'Mary Customer',
-            'email' => 'user@example.com',
-            'role' => 'user',
-            'password' => Hash::make('password'),
-        ]);
+        User::factory()->create([
+        'first_name' => 'Company',
+        'last_name' => 'User',
+        'email' => 'company@example.com',
+        'role' => 'company',
+        'company_id' => $company->id,
+        'password' => bcrypt('password'),
+    ]);
 
         // 🥬 Vegetables
         $tomato = Vegetable::create([
