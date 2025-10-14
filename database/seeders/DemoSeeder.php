@@ -3,90 +3,87 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Models\Company;
 use App\Models\Vegetable;
 use App\Models\Order;
 use App\Models\Payment;
+use Illuminate\Support\Facades\Hash;
 
 class DemoSeeder extends Seeder
 {
     public function run(): void
     {
-        // 🧑‍💼 Admin
-        $admin = User::create([
-            'first_name' => 'Admin',
-             'last_name' => 'User',
-            'email' => 'admin@example.com',
-            'role' => 'admin',
-            'password' => Hash::make('password'),
+        // ✅ Create admin only if not existing
+        $admin = User::firstOrCreate(
+            ['email' => 'admin@example.com'],
+            [
+                'first_name' => 'Admin',
+                'last_name' => 'User',
+                'role' => 'admin',
+                'password' => Hash::make('password'),
+            ]
+        );
+
+        // ✅ Create a company
+        $company = Company::firstOrCreate([
+            'name' => 'GreenHaven Ltd.',
+            'address' => 'Accra, Ghana',
         ]);
 
-        // 🏢 Company
-        $company = Company::create([
-            'name' => 'GreenFarm Ltd',
-            'email' => 'greenfarm@example.com',
-        ]);
+        // ✅ Create company user
+        $companyUser = User::firstOrCreate(
+            ['email' => 'company@example.com'],
+            [
+                'first_name' => 'Company',
+                'last_name' => 'Rep',
+                'role' => 'company',
+                'company_id' => $company->id,
+                'password' => Hash::make('password'),
+            ]
+        );
 
+        // ✅ Create normal user
+        $user = User::firstOrCreate(
+            ['email' => 'user@example.com'],
+            [
+                'first_name' => 'Mary',
+                'last_name' => 'Ayivor',
+                'role' => 'user',
+                'password' => Hash::make('password'),
+            ]
+        );
 
-        
-        $companyUser = User::create([
-         'first_name' => 'Company',
-        'last_name' => 'User',
-        'email' => 'company@example.com',
-        'company_id' => $company->id,
-        'password' => bcrypt('password'),
-        ]);
-
-        // 👩‍🌾 Normal user
-        User::factory()->create([
-        'first_name' => 'Company',
-        'last_name' => 'User',
-        'email' => 'company@example.com',
-        'role' => 'admin',
-        'company_id' => $company->id,
-        'password' => bcrypt('password'),
-    ]);
-
-        // 🥬 Vegetables
-        $tomato = Vegetable::create([
+        // ✅ Add some vegetables
+        $veg1 = Vegetable::firstOrCreate([
             'name' => 'Tomato',
-            'price' => 15,
-            'quantity' => 100,
-            'description' => 'Fresh local tomatoes',
+            'category' => 'Vegetable',
+            'price' => 12.50,
+            'description' => 'Fresh tomatoes from local farms',
         ]);
 
-        $pepper = Vegetable::create([
-            'name' => 'Pepper',
-            'price' => 10,
-            'quantity' => 200,
-            'description' => 'Hot red pepper',
+        $veg2 = Vegetable::firstOrCreate([
+            'name' => 'Carrot',
+            'category' => 'Vegetable',
+            'price' => 9.00,
+            'description' => 'Organic carrots rich in vitamin A',
         ]);
 
-        // 🧾 Order
-        $order = Order::create([
+        // ✅ Sample orders
+        $order = Order::firstOrCreate([
             'user_id' => $user->id,
             'company_id' => $company->id,
-            'total_price' => 25,
-            'status' => 'confirmed',
+            'status' => 'paid',
         ]);
 
-        // 💵 Payment
-        Payment::create([
+        // ✅ Sample payment
+        Payment::firstOrCreate([
             'order_id' => $order->id,
             'user_id' => $user->id,
-            'amount' => 25,
-            'status' => 'paid',
-            'payment_method' => 'manual',
-            'transaction_id' => 'DEMO12345',
-            'paid_at' => now(),
+            'amount' => 21.50,
+            'status' => 'success',
+            'method' => 'paystack',
+            'reference' => 'PAY-' . uniqid(),
         ]);
-
-        $this->command->info('✅ Demo data seeded successfully!');
-        $this->command->info('🔐 Login credentials:');
-        $this->command->info('Admin: admin@example.com / password');
-        $this->command->info('Company: company@example.com / password');
-        $this->command->info('User: user@example.com / password');
     }
 }
