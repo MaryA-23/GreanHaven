@@ -80,7 +80,7 @@ class DemoSeeder extends Seeder
             'user_id' => $user->id,
             'amount' => 21.50,
             'status' => 'success',
-            'method' => 'paystack',
+            'payment_method' => 'paystack',
             'reference' => 'PAY-' . uniqid(),
         ]);
     }
