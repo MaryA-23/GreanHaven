@@ -9,17 +9,18 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void
-    {
-        Schema::table('products', function (Blueprint $table) {
+   public function up()
+{
+    Schema::create('products', function (Blueprint $table) {
         $table->id();
-        $table->string('name'); 
+        $table->string('name');
         $table->enum('status', ['ready', 'not_ready'])->default('not_ready');
-        $table->foreignId('category_id')->constrained()->cascadeOnDelete();
-        $table->softDeletes(); // adds deleted_at column
-         $table->timestamps();
-        });
-    }
+        $table->unsignedBigInteger('category_id');
+        $table->softDeletes();
+        $table->timestamps();
+    });
+}
+
 
     /**
      * Reverse the migrations.
