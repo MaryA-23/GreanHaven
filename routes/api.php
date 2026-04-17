@@ -3,9 +3,8 @@
 use App\Http\Controllers\Api\PaymentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\VegetableController;
+use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
-use App\Http\Controllers\VegetableRequestController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrderController;
 
@@ -38,18 +37,13 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 });
 
 
-      Route::get('vegetables', [VegetableController::class, 'index']);
-      Route::get('vegetables/{id}', [VegetableController::class, 'show']);
+      Route::get('products', [ProductController::class, 'index']);
+      Route::get('products/{id}', [ProductController::class, 'show']);
       Route::middleware('auth:sanctum')->group(function () {
-      Route::post('vegetables', [VegetableController::class, 'store']);
-      Route::put('vegetables/{id}', [VegetableController::class, 'update']);
-      Route::delete('vegetables/{id}', [VegetableController::class, 'destroy']);
-      Route::post('vegetables/{id}/restore', [VegetableController::class, 'restore']);
-      // Requests
-      Route::post('vegetables/{id}/request', [VegetableRequestController::class, 'store']);
-      Route::post('vegetables/{id}/fulfill', [VegetableRequestController::class, 'fulfill']);
-      Route::get('vegetables/{id}/request-status', [VegetableRequestController::class, 'status']);
-
+      Route::post('products', [ProductController::class, 'store']);
+      Route::put('products/{id}', [ProductController::class, 'update']);
+      Route::delete('products/{id}', [ProductController::class, 'destroy']);
+      Route::post('products/{id}/restore', [ProductController::class, 'restore']);
   });
 
 // Orders routes
