@@ -46,6 +46,7 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
       Route::post('products/{id}/restore', [ProductController::class, 'restore']);
   });
 
+  
 // Orders routes
 Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
     // Normal users: can place orders & view only their own
