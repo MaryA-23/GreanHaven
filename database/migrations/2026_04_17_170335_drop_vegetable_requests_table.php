@@ -1,25 +1,20 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-  public function up()
-{
-    Schema::dropIfExists('vegetable_requests');
-}
+    public function up()
+    {
+        DB::statement('SET FOREIGN_KEY_CHECKS = 0;');
+        Schema::dropIfExists('vegetable_requests');
+        DB::statement('SET FOREIGN_KEY_CHECKS = 1;');
+    }
 
-public function down()
-{
-    Schema::create('vegetable_requests', function (Blueprint $table) {
-        $table->id();
-        $table->string('name');
-        $table->timestamps();
-    });
-}
+    public function down()
+    {
+        //
+    }
 };
