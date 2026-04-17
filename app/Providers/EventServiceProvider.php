@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
-use App\Events\VegetableReady;
-use App\Listeners\SendVegetableReadyNotification;
+use App\Events\ProductReady;
+use App\Listeners\SendProductReadyNotification;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -21,8 +21,8 @@ class EventServiceProvider extends ServiceProvider
             SendEmailVerificationNotification::class,
         ],
 
-        VegetableReady::class => [
-            SendVegetableReadyNotification::class,
+        ProductReady::class => [
+            SendProductReadyNotification::class,
         ],
     
     ];

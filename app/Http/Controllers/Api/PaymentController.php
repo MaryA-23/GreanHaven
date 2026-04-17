@@ -107,9 +107,9 @@ class PaymentController extends Controller
         // Update order
         $order->update(['status' => 'confirmed']);
 
-        // If linked to vegetable request, update it too
-        if ($order->vegetable_request_id) {
-            $order->vegetableRequest()->update(['status' => 'processing']);
+        // If linked to Product request, update it too
+        if ($order->Product_request_id) {
+            $order->ProductRequest()->update(['status' => 'processing']);
         }
 
         return $payment;
@@ -194,8 +194,8 @@ class PaymentController extends Controller
             }
             // ensure order status is confirmed
             $order->update(['status' => 'confirmed']);
-            if ($order->vegetable_request_id) {
-                $order->vegetableRequest()->update(['status' => 'processing']);
+            if ($order->Product_request_id) {
+                $order->ProductRequest()->update(['status' => 'processing']);
             }
         }
 
@@ -255,8 +255,8 @@ class PaymentController extends Controller
         if ($data['status'] === 'paid') {
             $order->update(['status' => 'confirmed']);
 
-            if ($order->vegetable_request_id) {
-                $order->vegetableRequest()->update(['status' => 'processing']);
+            if ($order->Product_request_id) {
+                $order->ProductRequest()->update(['status' => 'processing']);
             }
         }
 

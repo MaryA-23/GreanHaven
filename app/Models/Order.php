@@ -21,7 +21,7 @@ class Order extends Model
         return $this->belongsTo(Company::class);
     }
 
-    public function items()
+    public function orderItems()
     {
         return $this->hasMany(OrderItem::class);
     }
@@ -41,11 +41,7 @@ class Order extends Model
     {
         return $this->payment?->status ?? 'unpaid';
     }
-
-    public function vegetableRequest()
-    {
-        return $this->belongsTo(VegetableRequest::class);
-    }
+    
 
 
 }

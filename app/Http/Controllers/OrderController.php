@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Vegetable;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 
@@ -22,7 +22,7 @@ class OrderController extends Controller
     {
         $user = $request->user();
 
-        $query = Order::with('items.vegetable'); // eager load items & vegetables
+        $query = Order::with('items.Product'); // eager load items & Products
 
         if ($user->role === 'admin') {
             // Admin sees all orders
@@ -55,7 +55,7 @@ class OrderController extends Controller
     {
         $validated = $request->validate([
             'items' => 'required|array|min:1',
-            'items.*.vegetable_id' => 'required|exists:vegetables,id',
+            'items.*.product_id' => 'required|exists:Products,id',
             'items.*.quantity' => 'required|integer|min:1',
         ]);
 
@@ -77,9 +77,9 @@ class OrderController extends Controller
 
         $total = 0;
 
-        // Create order items with dynamic vegetable prices
+        // Create order items with dynamic Product prices
         foreach ($validated['items'] as $item) {
-            $veg = Vegetable::findOrFail($item['vegetable_id']);
+            $veg = Product::findOrFail($item['product_id']);
 
             $price = $veg->price; // get dynamic price from DB
             $subtotal = $price * $item['quantity'];
@@ -87,7 +87,7 @@ class OrderController extends Controller
             // Create order item
             OrderItem::create([
                 'order_id' => $order->id,
-                'vegetable_id' => $veg->id,
+                'product_id' => $veg->id,
                 'quantity' => $item['quantity'],
                 'price' => $price,
                 'subtotal' => $subtotal,
@@ -103,7 +103,7 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Order placed successfully.',
-            'data' => $order->load('items.vegetable'),
+            'data' => $order->load('items.Product'),
         ], 201);
     }
 
@@ -112,7 +112,7 @@ class OrderController extends Controller
      */
     public function show(Request $request, int $id): JsonResponse
     {
-        $order = Order::with('items.vegetable')->findOrFail($id);
+        $order = Order::with('items.Product')->findOrFail($id);
 
         if ($request->user()->role !== 'admin' && $order->user_id !== $request->user()->id) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
@@ -144,7 +144,7 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Order updated successfully.',
-            'data' => $order->load('items.vegetable'),
+            'data' => $order->load('items.Product'),
         ]);
     }
 

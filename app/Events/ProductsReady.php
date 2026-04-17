@@ -2,18 +2,18 @@
 
 namespace App\Events;
 
-use App\Models\Vegetable;
+use App\Models\Product;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class VegetableReady
+class ProductReady
 {
     use Dispatchable, SerializesModels;
 
-    public $vegetable;
+    public $Product;
 
-    public function __construct(Vegetable $vegetable)
+    public function __construct(Product $Product)
     {
-        $this->vegetable = $vegetable;
+        $this->Product = $Product;
     }
 }
