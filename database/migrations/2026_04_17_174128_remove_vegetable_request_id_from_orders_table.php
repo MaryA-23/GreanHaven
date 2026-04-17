@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-               $table->dropColumn('vegetable_request_id');
+            
+        $table->dropForeign(['vegetable_request_id']);
+        $table->dropColumn('vegetable_request_id');
         });
     }
 
@@ -22,7 +24,11 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-             $table->unsignedBigInteger('vegetable_request_id')->nullable();
+                $table->unsignedBigInteger('vegetable_request_id')->nullable();
+              $table->foreign('vegetable_request_id')
+              ->references('id')
+              ->on('vegetable_requests')
+              ->onDelete('cascade');
         });
     }
 };
