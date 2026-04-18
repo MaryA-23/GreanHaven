@@ -7,7 +7,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrderController;
-use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\CategoryController;
 
 
 
