@@ -116,7 +116,7 @@ class ProductController extends Controller
             'name' => 'sometimes|string|max:255',
             'price' => 'sometimes|numeric|min:0',
             'quantity' => 'sometimes|integer|min:0',
-            'category' => 'nullable|string|max:255',
+            'category_id' => 'required|exists:categories,id',
             'description' => 'nullable|string',
             'unit' => 'sometimes|string|max:50',
             'is_available' => 'nullable|boolean',
