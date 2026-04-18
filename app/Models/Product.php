@@ -21,6 +21,10 @@ class Product extends Model
    
     ];
 
+    protected $casts = [
+    'price' => 'float',
+    'is_available' => 'boolean',
+        ];
 
     public function orderItems()
 {

@@ -17,6 +17,11 @@ class OrderItem extends Model
         'subtotal',
     ];
 
+    protected $casts = [
+    'price' => 'float',
+    'subtotal' => 'float',
+    ];
+
     public function order()
     {
         return $this->belongsTo(Order::class);

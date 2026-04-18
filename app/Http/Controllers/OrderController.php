@@ -55,7 +55,7 @@ class OrderController extends Controller
     {
         $validated = $request->validate([
             'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|exists:Products,id',
+            'items.*.product_id' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
         ]);
 
@@ -77,21 +77,37 @@ class OrderController extends Controller
 
         $total = 0;
 
-        // Create order items with dynamic Product prices
-        foreach ($validated['items'] as $item) {
-            $veg = Product::findOrFail($item['product_id']);
+        // Create order items with dynamic Product price
+            foreach ($request->items as $item) {
+            $product = Product::find($item['product_id']);
 
-            $price = $veg->price; // get dynamic price from DB
+            // ❌ If product doesn't exist
+            if (!$product) {
+                return response()->json([
+                    'error' => 'Product not found'
+                ], 404);
+            }
+
+            // ❌ Prevent ordering unavailable or low stock
+            if (!$product->is_available || $product->quantity < $item['quantity']) {
+                return response()->json([
+                    'error' => "{$product->name} is not available in requested quantity"
+                ], 400);
+            }
+
+            $price = $product->price;
             $subtotal = $price * $item['quantity'];
 
-            // Create order item
-            OrderItem::create([
-                'order_id' => $order->id,
-                'product_id' => $veg->id,
-                'quantity' => $item['quantity'],
-                'price' => $price,
-                'subtotal' => $subtotal,
+            // ✅ Create order item
+            $order->items()->create([
+                'product_id' => $product->id,
+                'quantity'   => $item['quantity'],
+                'price'      => $price,
+                'subtotal'   => $subtotal,
             ]);
+
+            // ✅ Reduce stock
+            $product->decrement('quantity', $item['quantity']);
 
             $total += $subtotal;
         }
@@ -103,7 +119,7 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Order placed successfully.',
-            'data' => $order->load('items.Product'),
+            'data' => $order->load('items.product'),
         ], 201);
     }
 
@@ -144,7 +160,7 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Order updated successfully.',
-            'data' => $order->load('items.Product'),
+            'data' => $order->load('items.product'),
         ]);
     }
 
