@@ -13,7 +13,7 @@ class CancelUnpaidOrders extends Command
      *
      * @var string
      */
-    protected $signature = 'app:cancel-unpaid-orders';
+    protected $signature = 'orders:cancel-unpaid';
 
     /**
      * The console command description.
