@@ -107,6 +107,10 @@ class PaymentController extends Controller
         // Update order
         $order->update(['status' => 'confirmed']);
 
+         foreach ($order->items as $item) {
+        $item->product->decrement('quantity', $item->quantity);
+    }
+
         return $payment;
     }
 
