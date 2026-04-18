@@ -215,6 +215,7 @@ class PaymentController extends Controller
 
         $validator = Validator::make($request->all(), [
             'order_id'         => 'required|exists:orders,id',
+            'user_id'          => 'required|exists:users,id',
             'amount'           => 'required|numeric|min:0',
             'status'           => 'in:unpaid,paid,pending,failed',
             'payment_method'   => 'nullable|string',
