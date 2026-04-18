@@ -58,31 +58,30 @@ class ProductController extends Controller
      * Add a new Product (Admin only).
      */
     public function store(Request $request): JsonResponse
-    {
-        if ($request->user()->role !== 'admin') {
-            return response()->json(['error' => 'Unauthorized. Only admins can add Products.'], 403);
-        }
-
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
-            'quantity' => 'required|integer|min:0',
-            'category' => 'nullable|string|max:255',
-            'description' => 'nullable|string',
-            'unit' => 'required|string|max:50',
-            'is_available' => 'nullable|boolean',
-            'supplier' => 'nullable|string|max:255',
-            'status' => 'nullable|string|in:ready,not_ready',
-        ]);
-
-        $veg = Product::create($validated);
-
-        return response()->json([
-            'success' => true,
-            'message' => "{$veg->name} has been added.",
-            'data' => new ProductResource($veg),
-        ], 201);
+{
+    if ($request->user()->role !== 'admin') {
+        return response()->json(['error' => 'Unauthorized. Only admins can add Products.'], 403);
     }
+
+    $validated = $request->validate([
+        'name' => 'required|string|max:255',
+        'price' => 'required|numeric|min:0',
+        'quantity' => 'required|integer|min:0',
+        'category_id' => 'required|exists:categories,id', // FIXED
+        'description' => 'nullable|string',
+        'unit' => 'required|string|max:50',
+        'is_available' => 'nullable|boolean',
+        'status' => 'nullable|string|in:ready,not_ready',
+    ]);
+
+    $product = Product::create($validated);
+
+    return response()->json([
+        'success' => true,
+        'message' => "{$product->name} has been added.",
+        'data' => new ProductResource($product),
+    ], 201);
+}
 
     /**
      * Show Product details.
