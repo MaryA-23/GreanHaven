@@ -7,11 +7,11 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\Api\CategoryController;
 
 
 
 /*
-|--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
 |
@@ -45,6 +45,14 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
       Route::delete('products/{id}', [ProductController::class, 'destroy']);
       Route::post('products/{id}/restore', [ProductController::class, 'restore']);
   });
+
+        Route::get('categories', [CategoryController::class, 'index']);
+        Route::get('categories/{id}', [CategoryController::class, 'show']);
+        Route::middleware('auth:sanctum')->group(function () {
+        Route::post('categories', [CategoryController::class, 'store']);
+        Route::put('categories/{id}', [CategoryController::class, 'update']);
+        Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
+    });
 
   
 // Orders routes
