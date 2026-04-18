@@ -106,9 +106,6 @@ class OrderController extends Controller
                 'subtotal'   => $subtotal,
             ]);
 
-            // ✅ Reduce stock
-            $product->decrement('quantity', $item['quantity']);
-
             $total += $subtotal;
         }
 
