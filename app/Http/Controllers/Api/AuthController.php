@@ -22,6 +22,7 @@ class AuthController extends Controller
             "last_name"=> 'required',
             "email"=> 'required|string|unique:users',
             'password'=> 'required|string|min:8|confirmed',
+            'role' => 'sometimes|in:admin,user',
             ]);
 
             $user = User::create([
@@ -29,8 +30,11 @@ class AuthController extends Controller
                 'last_name'  => $request->last_name,
                 'email'      => $request->email,
                 'password'   => Hash::make($request->password),
+                'role' => $request->role ?? 'user', 
             ]);
 
+            $user->name = trim($user->first_name . ' ' . $user->last_name);
+            $user->save();
             $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
@@ -78,7 +82,7 @@ class AuthController extends Controller
     public function logout(Request $request){
         $request->user()->currentAccessToken()->delete();
         return response()->json([
-            'succes'=> true,
+            'success' => true,
             'message'=> 'Logged out Successfully',
             ]);
     }
