@@ -58,30 +58,51 @@ class ProductController extends Controller
      * Add a new Product (Admin only).
      */
     public function store(Request $request): JsonResponse
-{
-    if ($request->user()->role !== 'admin') {
-        return response()->json(['error' => 'Unauthorized. Only admins can add Products.'], 403);
+    {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['error' => 'Unauthorized. Only admins can add Products.'], 403);
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'quantity' => 'required|integer|min:0',
+            'category_id' => 'required|exists:categories,id',
+            'description' => 'nullable|string',
+            'unit' => 'required|string|max:50',
+            'is_available' => 'nullable|boolean',
+            'status' => 'nullable|string|in:ready,not_ready',
+        ]);
+
+        //  CHECK IF PRODUCT ALREADY EXISTS
+        $existingProduct = Product::where('name', $validated['name'])
+            ->where('category_id', $validated['category_id'])
+            ->first();
+
+        if ($existingProduct) {
+
+            // update stock instead of duplicate
+            $existingProduct->quantity += $validated['quantity'];
+            $existingProduct->price = $validated['price']; // optional update
+            $existingProduct->is_available = true;
+            $existingProduct->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => "{$existingProduct->name} stock updated successfully.",
+                'data' => new ProductResource($existingProduct),
+            ], 200);
+        }
+
+        // create new product
+        $product = Product::create($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$product->name} has been added.",
+            'data' => new ProductResource($product),
+        ], 201);
     }
-
-    $validated = $request->validate([
-        'name' => 'required|string|max:255',
-        'price' => 'required|numeric|min:0',
-        'quantity' => 'required|integer|min:0',
-        'category_id' => 'required|exists:categories,id', // FIXED
-        'description' => 'nullable|string',
-        'unit' => 'required|string|max:50',
-        'is_available' => 'nullable|boolean',
-        'status' => 'nullable|string|in:ready,not_ready',
-    ]);
-
-    $product = Product::create($validated);
-
-    return response()->json([
-        'success' => true,
-        'message' => "{$product->name} has been added.",
-        'data' => new ProductResource($product),
-    ], 201);
-}
 
     /**
      * Show Product details.

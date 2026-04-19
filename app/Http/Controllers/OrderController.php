@@ -3,17 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use App\Services\InventoryService;
 
 class OrderController extends Controller
 {
-    public function __construct()
+
+protected $inventoryService;
+    public function __construct(InventoryService $inventoryService)
     {
         $this->middleware('auth:sanctum');
+        $this->inventoryService = $inventoryService;
     }
 
     /**
@@ -52,7 +55,7 @@ class OrderController extends Controller
     /**
      * Create a new order (user).
      */
-     public function store(Request $request): JsonResponse
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'items' => 'required|array|min:1',
@@ -66,21 +69,22 @@ class OrderController extends Controller
             return response()->json(['error' => 'Unauthenticated'], 401);
         }
 
+        // prevent multiple pending orders
+        $existingOrder = Order::where('user_id', $user->id)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existingOrder) {
+            return response()->json([
+                'message' => 'You already have a pending order'
+            ], 400);
+        }
+
         DB::beginTransaction();
 
         try {
             $total = 0;
 
-                 $existingOrder = Order::where('user_id', auth()->id())
-                ->where('status', 'pending')
-                ->first();
-
-            if ($existingOrder) {
-                return response()->json([
-                    'message' => 'You already have a pending order'
-                ], 400);
-            }
-            // Create order FIRST but safely inside transaction
             $order = Order::create([
                 'user_id' => $user->id,
                 'company_id' => $user->company_id,
@@ -90,33 +94,29 @@ class OrderController extends Controller
 
             foreach ($validated['items'] as $item) {
 
-                // Lock row to prevent race condition
-                $product = Product::where('id', $item['product_id'])->lockForUpdate()->first();
+                $product = Product::where('id', $item['product_id'])
+                    ->lockForUpdate()
+                    ->first();
 
-                // Extra safety check
-                if (!$product || !$product->is_available) {
+                if (!$product || $product->status === 'out_of_stock') {
                     throw new \Exception("Product not available");
                 }
 
-                if ($product->quantity < $item['quantity']) {
-                    throw new \Exception("{$product->name} is out of stock");
-                }
+                // USE SERVICE HERE (IMPORTANT CHANGE)
+                $this->inventoryService->deductStock($product, $item['quantity']);
 
-                $price = $product->price;
-                $subtotal = $price * $item['quantity'];
+                $subtotal = $product->price * $item['quantity'];
 
-                // Create item
                 $order->items()->create([
                     'product_id' => $product->id,
                     'quantity'   => $item['quantity'],
-                    'price'      => $price,
+                    'price'      => $product->price,
                     'subtotal'   => $subtotal,
                 ]);
 
                 $total += $subtotal;
             }
 
-            // Update total AFTER loop
             $order->update(['total_price' => $total]);
 
             DB::commit();
@@ -194,4 +194,5 @@ class OrderController extends Controller
             'message' => 'Order deleted successfully.',
         ]);
     }
+    
 }
