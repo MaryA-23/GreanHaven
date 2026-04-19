@@ -127,84 +127,89 @@ class PaymentController extends Controller
      */
     public function callback(Request $request)
     {
-        // 1) try to get reference from query param (redirect), fallback to JSON payload
+        // 1) Get reference
         $reference = $request->query('reference') 
-                     ?? $request->input('reference') 
-                     ?? data_get($request->all(), 'data.reference');
+            ?? $request->input('reference') 
+            ?? data_get($request->all(), 'data.reference');
 
         if (!$reference) {
-            // No reference provided — bail out
-            Log::warning('Paystack callback called without reference', ['request' => $request->all()]);
+            Log::warning('Paystack callback without reference', ['request' => $request->all()]);
             return response()->json(['error' => 'No transaction reference provided.'], 400);
         }
 
-        // 2) verify transaction with Paystack using HTTP (explicit and clear)
+        // 2) Verify payment with Paystack
         try {
-            $paystackSecret = env('PAYSTACK_SECRET_KEY') ?: config('services.paystack.secret') ?? null;
+            $paystackSecret = config('services.paystack.secret') ?? env('PAYSTACK_SECRET_KEY');
+
             if (!$paystackSecret) {
-                Log::error('Paystack secret key not configured.');
-                return response()->json(['error' => 'Payment provider secret not configured.'], 500);
+                Log::error('Paystack secret key missing');
+                return response()->json(['error' => 'Payment config error'], 500);
             }
 
             $response = Http::withToken($paystackSecret)
                 ->get("https://api.paystack.co/transaction/verify/{$reference}");
 
         } catch (\Throwable $e) {
-            Log::error('Paystack verify HTTP call failed', ['error' => $e->getMessage()]);
-            return response()->json(['error' => 'Failed to verify payment', 'message' => $e->getMessage()], 500);
+            Log::error('Paystack verification failed', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Verification failed'], 500);
         }
 
         if ($response->failed()) {
-            // Paystack returned an error (400/404/whatever)
-            Log::warning('Paystack verify returned failed', ['status' => $response->status(), 'body' => $response->body()]);
-            return response()->json(['error' => 'Payment verification failed', 'detail' => $response->body()], $response->status());
+            return response()->json([
+                'error' => 'Payment verification failed',
+                'detail' => $response->body()
+            ], $response->status());
         }
 
         $body = $response->json();
         $data = $body['data'] ?? null;
 
-        if (! $data || ! ($body['status'] ?? false)) {
-            Log::warning('Paystack verify returned no data or status false', ['body' => $body]);
-            return response()->json(['error' => 'Payment verification returned invalid data', 'detail' => $body], 400);
+        if (!$data || !$body['status']) {
+            return response()->json(['error' => 'Invalid Paystack response'], 400);
         }
 
-        // 3) process payment data
-        $orderId   = $data['metadata']['order_id'] ?? null;
-        $amount    = $data['amount'] / 100;
-        $reference = $data['reference']; // the same reference we verified
+        // 3) Extract data
+        $orderId       = $data['metadata']['order_id'] ?? null;
+        $amount        = $data['amount'] / 100;
+        $transactionId = $data['reference'];
 
-        if (! $orderId) {
-            Log::warning('Paystack verify returned no order_id in metadata', ['data' => $data]);
-            // optionally record the payment without order, or just return error
-            return response()->json(['error' => 'No order_id found in payment metadata.'], 400);
+        if (!$orderId) {
+            return response()->json(['error' => 'Missing order_id in metadata'], 400);
         }
 
         $order = Order::find($orderId);
-        if (! $order) {
-            Log::warning('Order not found for payment callback', ['order_id' => $orderId]);
-            return response()->json(['error' => 'Order not found.'], 404);
+        if (!$order) {
+            return response()->json(['error' => 'Order not found'], 404);
         }
 
-        // record payment if not exists
-        $payment = Payment::where('gateway_reference', $reference)->first();
-        if (! $payment) {
-            $payment = $this->recordPayment($order, $amount, $reference, 'Paystack');
+        // 4) Prevent duplicate payment
+        $payment = Payment::where('transaction_id', $transactionId)->first();
+
+        if (!$payment) {
+            $payment = Payment::create([
+                'order_id'       => $order->id,
+                'user_id'        => $order->user_id,
+                'amount'         => $amount,
+                'status'         => 'paid',
+                'payment_method' => 'Paystack',
+                'transaction_id' => $transactionId,
+                'paid_at'        => now(),
+            ]);
         } else {
-            // ensure status is paid and paid_at set
             if ($payment->status !== 'paid') {
-                $payment->update(['status' => 'paid', 'paid_at' => now()]);
-            }
-            // ensure order status is confirmed
-            $order->update(['status' => 'confirmed']);
-            if ($order->Product_request_id) {
-                $order->ProductRequest()->update(['status' => 'processing']);
+                $payment->update([
+                    'status'  => 'paid',
+                    'paid_at' => now(),
+                ]);
             }
         }
+
+        // 5) Update order
+        $order->update(['status' => 'confirmed']);
 
         return response()->json([
-            'message' => 'Payment verified and recorded',
-            'payment' => $payment ? new PaymentResource($payment->load('order')) : null,
-            'raw' => $data,
+            'message' => 'Payment verified successfully',
+            'payment' => new PaymentResource($payment->load('order')),
         ]);
     }
 
