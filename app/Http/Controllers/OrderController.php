@@ -71,6 +71,15 @@ class OrderController extends Controller
         try {
             $total = 0;
 
+                 $existingOrder = Order::where('user_id', auth()->id())
+                ->where('status', 'pending')
+                ->first();
+
+            if ($existingOrder) {
+                return response()->json([
+                    'message' => 'You already have a pending order'
+                ], 400);
+            }
             // Create order FIRST but safely inside transaction
             $order = Order::create([
                 'user_id' => $user->id,
