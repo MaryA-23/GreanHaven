@@ -219,8 +219,8 @@ class PaymentController extends Controller
             $order->update(['status' => 'confirmed']);
 
             // update related request (FIXED TYPO SAFELY)
-            if ($order->product_request_id) {
-                $order->productRequest()->update([
+            if ($order->product_id) {
+                $order->product()->update([
                     'status' => 'processing'
                 ]);
             }
