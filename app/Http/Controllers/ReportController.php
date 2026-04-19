@@ -15,12 +15,14 @@ class ReportController extends Controller
     }
 
     // Orders summary with optional date/company filter
-    public function ordersSummary(Request $request)
+     public function ordersSummary(Request $request)
     {
+        $user = $request->user();
         $query = Order::query();
 
-        if ($request->company_id) {
-            $query->where('company_id', $request->company_id);
+        // Restrict based on role
+        if ($user->role === 'user') {
+            $query->where('user_id', $user->id);
         }
 
         if ($request->date_from) {
@@ -42,21 +44,19 @@ class ReportController extends Controller
     }
 
     // Sales summary with optional date/company filter
-    public function salesSummary(Request $request)
+     public function salesSummary(Request $request)
     {
         $user = $request->user();
         $query = Order::query();
 
-        if ($user->role === 'company') {
-            $query->where('company_id', $user->company_id);
-        } elseif ($user->role === 'user') {
+        if ($user->role === 'user') {
             $query->where('user_id', $user->id);
         }
 
-        // Optional date filters
         if ($request->date_from) {
             $query->whereDate('created_at', '>=', $request->date_from);
         }
+
         if ($request->date_to) {
             $query->whereDate('created_at', '<=', $request->date_to);
         }
@@ -69,12 +69,15 @@ class ReportController extends Controller
 
 
     // Payments summary with optional date/company filter
-    public function paymentsSummary(Request $request)
+     public function paymentsSummary(Request $request)
     {
+        $user = $request->user();
         $query = Payment::query();
 
-        if ($request->company_id) {
-            $query->whereHas('order', fn($q) => $q->where('company_id', $request->company_id));
+        if ($user->role === 'user') {
+            $query->whereHas('order', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            });
         }
 
         if ($request->date_from) {
