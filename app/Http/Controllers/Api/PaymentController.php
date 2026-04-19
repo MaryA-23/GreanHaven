@@ -127,89 +127,109 @@ class PaymentController extends Controller
      */
     public function callback(Request $request)
     {
-        // 1) Get reference
-        $reference = $request->query('reference') 
-            ?? $request->input('reference') 
+        // 1. Get reference safely
+        $reference = $request->query('reference')
+            ?? $request->input('reference')
             ?? data_get($request->all(), 'data.reference');
 
         if (!$reference) {
-            Log::warning('Paystack callback without reference', ['request' => $request->all()]);
-            return response()->json(['error' => 'No transaction reference provided.'], 400);
+            Log::warning('Paystack callback missing reference', [
+                'request' => $request->all()
+            ]);
+
+            return response()->json([
+                'error' => 'No transaction reference provided'
+            ], 400);
         }
 
-        // 2) Verify payment with Paystack
+        // 2. Verify with Paystack
         try {
-            $paystackSecret = config('services.paystack.secret') ?? env('PAYSTACK_SECRET_KEY');
+            $secret = config('services.paystack.secret');
 
-            if (!$paystackSecret) {
-                Log::error('Paystack secret key missing');
-                return response()->json(['error' => 'Payment config error'], 500);
+            if (!$secret) {
+                return response()->json([
+                    'error' => 'Paystack secret not configured'
+                ], 500);
             }
 
-            $response = Http::withToken($paystackSecret)
+            $response = Http::withToken($secret)
                 ->get("https://api.paystack.co/transaction/verify/{$reference}");
 
         } catch (\Throwable $e) {
-            Log::error('Paystack verification failed', ['error' => $e->getMessage()]);
-            return response()->json(['error' => 'Verification failed'], 500);
+            Log::error('Paystack verify failed', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'error' => 'Payment verification failed'
+            ], 500);
         }
 
         if ($response->failed()) {
             return response()->json([
-                'error' => 'Payment verification failed',
+                'error' => 'Verification failed',
                 'detail' => $response->body()
-            ], $response->status());
+            ], 400);
         }
 
         $body = $response->json();
         $data = $body['data'] ?? null;
 
-        if (!$data || !$body['status']) {
-            return response()->json(['error' => 'Invalid Paystack response'], 400);
+        if (!$data || !($body['status'] ?? false)) {
+            return response()->json([
+                'error' => 'Invalid Paystack response'
+            ], 400);
         }
 
-        // 3) Extract data
-        $orderId       = $data['metadata']['order_id'] ?? null;
-        $amount        = $data['amount'] / 100;
-        $transactionId = $data['reference'];
+        // 3. Extract data
+        $orderId = $data['metadata']['order_id'] ?? null;
+        $amount  = $data['amount'] / 100;
+        $ref     = $data['reference'];
 
         if (!$orderId) {
-            return response()->json(['error' => 'Missing order_id in metadata'], 400);
+            return response()->json([
+                'error' => 'Order ID missing in metadata'
+            ], 400);
         }
 
         $order = Order::find($orderId);
+
         if (!$order) {
-            return response()->json(['error' => 'Order not found'], 404);
+            return response()->json([
+                'error' => 'Order not found'
+            ], 404);
         }
 
-        // 4) Prevent duplicate payment
-        $payment = Payment::where('transaction_id', $transactionId)->first();
+        // 4. Prevent duplicate payment (IMPORTANT FIX)
+        $payment = Payment::where('gateway_reference', $ref)->first();
 
         if (!$payment) {
+
             $payment = Payment::create([
-                'order_id'       => $order->id,
-                'user_id'        => $order->user_id,
-                'amount'         => $amount,
-                'status'         => 'paid',
-                'payment_method' => 'Paystack',
-                'transaction_id' => $transactionId,
-                'paid_at'        => now(),
+                'order_id'           => $order->id,
+                'user_id'            => $order->user_id,
+                'amount'             => $amount,
+                'status'             => 'paid',
+                'payment_method'     => 'Paystack',
+                'gateway_reference'  => $ref,
+                'paid_at'            => now(),
             ]);
-        } else {
-            if ($payment->status !== 'paid') {
-                $payment->update([
-                    'status'  => 'paid',
-                    'paid_at' => now(),
+
+            // update order
+            $order->update(['status' => 'confirmed']);
+
+            // update related request (FIXED TYPO SAFELY)
+            if ($order->product_request_id) {
+                $order->productRequest()->update([
+                    'status' => 'processing'
                 ]);
             }
         }
 
-        // 5) Update order
-        $order->update(['status' => 'confirmed']);
-
         return response()->json([
             'message' => 'Payment verified successfully',
-            'payment' => new PaymentResource($payment->load('order')),
+            'payment' => $payment->load('order'),
+            'data' => $data
         ]);
     }
 
