@@ -23,7 +23,8 @@ class ProductController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Product::query();
+        // $query = Product::query();
+        $query = Product::with('category');
 
         // Filter by name (partial match)
         if ($request->filled('name')) {
@@ -34,7 +35,20 @@ class ProductController extends Controller
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
+        
+        // Filter by price range
+        if ($request->filled('min_price')) {
+          $query->where('price', '>=', $request->min_price);  
+}
+        if ($request->filled('max_price')) {
+            $query->where('price', '<=', $request->max_price);  
+        }
 
+        // Filter by stock availability
+        if ($request->filled('in_stock')) {
+         $query->where('status', 'active')  
+          ->where('quantity', '>', 0);    
+}
         // Include soft deleted if requested
         if ($request->boolean('with_trashed')) {
             $query->withTrashed();
