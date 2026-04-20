@@ -12,32 +12,30 @@ class InventoryService
     {
         if ($product->quantity < $quantity) {
             throw ValidationException::withMessages([
-                'stock' => "{$product->name} is out of stock or insufficient quantity"
+                'stock' => "{$product->name} insufficient stock"
             ]);
         }
 
         $product->quantity -= $quantity;
 
-        // auto status update
-        if ($product->quantity <= 0) {
-            $product->quantity = 0;
-            $product->status = 'out_of_stock';
+        // ✅ Status logic
+        if ($product->quantity > 0) {
+            $product->status = 'active';           
+        } else {
+            $product->status = 'out_of_stock';    
         }
 
         $product->save();
     }
 
-    /**
-     * Add stock (restock)
-     */
     public function addStock(Product $product, int $quantity)
     {
         $product->quantity += $quantity;
-
+        
         if ($product->quantity > 0) {
-            $product->status = 'active';
+            $product->status = 'active';           
         }
-
+        
         $product->save();
     }
 }
