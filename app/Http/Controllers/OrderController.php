@@ -79,6 +79,18 @@ protected $inventoryService;
                 'message' => 'You already have a pending order'
             ], 400);
         }
+        // merge duplicate product entries in the order
+        $mergedItems = [];
+
+        foreach ($validated['items'] as $item) {
+            $productId = $item['product_id'];
+
+            if (!isset($mergedItems[$productId])) {
+                $mergedItems[$productId] = $item['quantity'];
+            } else {
+                $mergedItems[$productId] += $item['quantity'];
+            }
+        }
 
         DB::beginTransaction();
 
@@ -92,30 +104,37 @@ protected $inventoryService;
                 'total_price' => 0,
             ]);
 
-            foreach ($validated['items'] as $item) {
+              foreach ($mergedItems as $productId => $quantity) {
 
-                $product = Product::where('id', $item['product_id'])
-                    ->lockForUpdate()
-                    ->first();
+            $product = Product::where('id', $productId)
+                ->lockForUpdate()
+                ->first();
 
-                if (!$product || $product->status === 'out_of_stock') {
-                    throw new \Exception("Product not available");
-                }
-
-                // USE SERVICE HERE (IMPORTANT CHANGE)
-                $this->inventoryService->deductStock($product, $item['quantity']);
-
-                $subtotal = $product->price * $item['quantity'];
-
-                $order->items()->create([
-                    'product_id' => $product->id,
-                    'quantity'   => $item['quantity'],
-                    'price'      => $product->price,
-                    'subtotal'   => $subtotal,
-                ]);
-
-                $total += $subtotal;
+            if (!$product) {
+                throw new \Exception("Product not found");
             }
+
+            //  Prevent ordering inactive/out of stock
+            if ($product->status !== 'active') {
+                throw new \Exception("Product {$product->name} is not available");
+            }
+
+            //  Use inventory service (handles stock + status)
+            $this->inventoryService->deductStock($product, $quantity);
+
+            $subtotal = $product->price * $quantity;
+
+            //  Create order item (NO DUPLICATES)
+            $order->items()->create([
+                'product_id' => $product->id,
+                'quantity'   => $quantity,
+                'price'      => $product->price,
+                'subtotal'   => $subtotal,
+            ]);
+
+            $total += $subtotal;
+        }
+
 
             $order->update(['total_price' => $total]);
 

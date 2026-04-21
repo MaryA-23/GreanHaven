@@ -8,6 +8,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\Api\Admin\DashboardController;
 
 
 
@@ -110,5 +111,9 @@ Route::prefix('reports')->middleware('auth:sanctum')->group(function () {
         Route::get('/sales', [ReportController::class, 'salesSummary']);
         Route::get('/payments', [ReportController::class, 'paymentsSummary']);
     });
+});
+
+Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index']);
 });
 

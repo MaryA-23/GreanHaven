@@ -36,5 +36,10 @@ class Product extends Model
         return $this->belongsTo(Category::class);
     }
 
+    public function isLowStock()
+    {
+        return $this->quantity <= $this->low_stock_threshold && $this->quantity > 0;
+    }
+
 }
 
