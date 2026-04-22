@@ -79,7 +79,7 @@ class DashboardController extends Controller
             ->map(function ($order) {
                 return [
                     'id' => $order->id,
-                   'customer' => $order->user->name ?? 'N/A',,
+                   'customer' => $order->user->name ?? 'N/A',
                     'total' => $order->total_price,
                     'status' => $order->status,
                     'payment_status' => $order->payment->status ?? 'unpaid',
