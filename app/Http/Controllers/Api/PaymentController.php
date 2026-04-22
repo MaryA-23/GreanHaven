@@ -197,7 +197,7 @@ class PaymentController extends Controller
     /**
      * Store a newly created payment for an order (manual entry).
      */
-    public function store(Request $request): JsonResponse
+   public function store(Request $request): JsonResponse
     {
         $user = $request->user();
 
@@ -207,7 +207,7 @@ class PaymentController extends Controller
             'amount'           => 'required|numeric|min:0',
             'status'           => 'in:unpaid,paid,pending,failed',
             'payment_method'   => 'nullable|string',
-            'gateway_reference'=> 'nullable|string|unique:payments,gateway_reference',
+            'gateway_reference'=> 'nullable|string',
             'paid_at'          => 'nullable|date',
             'notes'            => 'nullable|string',
         ]);
@@ -217,37 +217,60 @@ class PaymentController extends Controller
         }
 
         $order = Order::find($request->order_id);
+
         if ($order->user_id !== $user->id) {
-            return response()->json(['error' => 'Unauthorized: You do not own this order'], 403);
+            return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         if ($request->amount != $order->total_price) {
             return response()->json(['error' => 'Amount must match order total_price'], 400);
         }
 
-        $data = $request->only(['amount', 'status', 'payment_method', 'gateway_reference', 'notes']);
-        if ($request->status === 'paid') {
-            $data['paid_at'] = $request->paid_at ?? now();
+        // 🔥 FIND EXISTING PAYMENT (KEY FIX)
+        $payment = Payment::where('order_id', $order->id)
+            ->where('user_id', $user->id)
+            ->first();
+
+        // IF EXISTS → UPDATE IT
+        if ($payment) {
+
+            $payment->update([
+                'amount'            => $request->amount,
+                'status'            => $request->status ?? $payment->status,
+                'payment_method'    => $request->payment_method ?? $payment->payment_method,
+                'gateway_reference' => $request->gateway_reference ?? $payment->gateway_reference,
+                'paid_at'           => $request->status === 'paid'
+                    ? ($request->paid_at ?? now())
+                    : $payment->paid_at,
+                'notes'             => $request->notes ?? $payment->notes,
+            ]);
+
+        } else {
+
+            // OTHERWISE → CREATE NEW
+            $payment = Payment::create([
+                'order_id'          => $order->id,
+                'user_id'           => $user->id,
+                'amount'            => $request->amount,
+                'status'            => $request->status ?? 'unpaid',
+                'payment_method'    => $request->payment_method,
+                'gateway_reference' => $request->gateway_reference,
+                'paid_at'           => $request->status === 'paid' ? now() : null,
+                'notes'             => $request->notes,
+            ]);
         }
 
-        $payment = Payment::create([
-            'order_id'          => $order->id,
-            'user_id'           => $user->id,
-            'amount'            => $data['amount'],
-            'status'            => $data['status'] ?? 'unpaid',
-            'payment_method'    => $data['payment_method'],
-            'gateway_reference' => $data['gateway_reference'] ?? null,
-            'paid_at'           => $data['paid_at'] ?? null,
-            'notes'             => $data['notes'],
-        ]);
-
-        if ($data['status'] === 'paid') {
+        // CONFIRM ORDER IF PAID
+        if ($request->status === 'paid') {
             $order->update(['status' => 'confirmed']);
         }
 
         return response()->json([
-            'message' => 'Payment created successfully',
-            'payment' => new PaymentResource($payment->load('order')),
+            'message' => $payment->wasRecentlyCreated
+                ? 'Payment created successfully'
+                : 'Payment updated successfully',
+
+            'payment' => $payment->load('order'),
         ], 201);
     }
 
