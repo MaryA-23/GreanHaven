@@ -91,7 +91,7 @@ class DashboardController extends Controller
     private function lowStockProducts()
     {
         return Product::whereColumn('quantity', '<=', 'low_stock_threshold')
-            ->orwhere('quantity', '>', 0)
+            ->orWhere('quantity', 0)
             ->get(['id', 'name', 'quantity', 'low_stock_threshold']);
     }
 
