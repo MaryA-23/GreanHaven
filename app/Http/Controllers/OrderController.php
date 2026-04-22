@@ -96,6 +96,10 @@ protected $inventoryService;
 
         try {
             $total = 0;
+            dd([
+    'user_id_from_auth' => $user->id,
+    'company_id' => $user->company_id,
+]);
 
             $order = Order::create([
                 'user_id' => $user->id,
