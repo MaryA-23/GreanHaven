@@ -127,16 +127,12 @@ class PaymentController extends Controller
      */
     public function callback(Request $request)
     {
-        // 1. Get reference safely
+        // 1. Get reference
         $reference = $request->query('reference')
             ?? $request->input('reference')
             ?? data_get($request->all(), 'data.reference');
 
         if (!$reference) {
-            Log::warning('Paystack callback missing reference', [
-                'request' => $request->all()
-            ]);
-
             return response()->json([
                 'error' => 'No transaction reference provided'
             ], 400);
@@ -146,20 +142,10 @@ class PaymentController extends Controller
         try {
             $secret = config('services.paystack.secret');
 
-            if (!$secret) {
-                return response()->json([
-                    'error' => 'Paystack secret not configured'
-                ], 500);
-            }
-
             $response = Http::withToken($secret)
                 ->get("https://api.paystack.co/transaction/verify/{$reference}");
 
         } catch (\Throwable $e) {
-            Log::error('Paystack verify failed', [
-                'error' => $e->getMessage()
-            ]);
-
             return response()->json([
                 'error' => 'Payment verification failed'
             ], 500);
@@ -181,7 +167,7 @@ class PaymentController extends Controller
             ], 400);
         }
 
-        // 3. Extract data
+        // 3. Extract values
         $orderId = $data['metadata']['order_id'] ?? null;
         $amount  = $data['amount'] / 100;
         $ref     = $data['reference'];
@@ -200,39 +186,14 @@ class PaymentController extends Controller
             ], 404);
         }
 
-        // 4. Prevent duplicate payment (IMPORTANT FIX)
-        $payment = Payment::where('gateway_reference', $ref)->first();
-
-        if (!$payment) {
-
-            $payment = Payment::create([
-                'order_id'           => $order->id,
-                'user_id'            => $order->user_id,
-                'amount'             => $amount,
-                'status'             => 'paid',
-                'payment_method'     => 'Paystack',
-                'gateway_reference'  => $ref,
-                'paid_at'            => now(),
-            ]);
-
-            // update order
-            $order->update(['status' => 'confirmed']);
-
-            // update related request (FIXED TYPO SAFELY)
-            if ($order->product_id) {
-                $order->product()->update([
-                    'status' => 'processing'
-                ]);
-            }
-        }
+        // ✅ 4. THIS IS ALL YOU NEED
+        $payment = $this->recordPayment($order, $amount, $ref, 'paystack');
 
         return response()->json([
             'message' => 'Payment verified successfully',
             'payment' => $payment->load('order'),
-            'data' => $data
         ]);
     }
-
     /**
      * Store a newly created payment for an order (manual entry).
      */
