@@ -29,7 +29,7 @@ class DashboardController extends Controller
             'total_orders' => Order::count(),
             'pending_orders' => Order::where('status', 'pending')->count(),
             'confirmed_orders' => Order::where('status', 'confirmed')->count(),
-            'total_payments' => Payment::sum('amount'),
+             'total_payments' => (float) Payment::sum('amount'),
         ];
     }
 
@@ -62,9 +62,10 @@ class DashboardController extends Controller
             ->select(
                 'products.id',
                 'products.name',
+                'products.price',
                 DB::raw('SUM(order_items.quantity) as total_sold')
             )
-            ->groupBy('products.id', 'products.name')
+            ->groupBy('products.id', 'products.name', 'products.price')
             ->orderByDesc('total_sold')
             ->limit(5)
             ->get();
@@ -90,7 +91,7 @@ class DashboardController extends Controller
     private function lowStockProducts()
     {
         return Product::whereColumn('quantity', '<=', 'low_stock_threshold')
-            ->where('quantity', '>', 0)
+            ->orwhere('quantity', '>', 0)
             ->get(['id', 'name', 'quantity', 'low_stock_threshold']);
     }
 
