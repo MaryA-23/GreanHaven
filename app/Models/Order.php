@@ -47,6 +47,16 @@ class Order extends Model
         return $this->payment?->status ?? 'unpaid';
     }
     
-
+    protected static function booted()
+    {
+        static::created(function ($order) {
+            Payment::create([
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+                'amount' => $order->total_price,
+                'status' => 'pending',
+            ]);
+        });
+    }
 
 }
