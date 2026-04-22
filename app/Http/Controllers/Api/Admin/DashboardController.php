@@ -46,12 +46,15 @@ class DashboardController extends Controller
     private function salesStats()
     {
         return [
-            'today_revenue' => Payment::whereDate('created_at', today())->sum('amount'),
-            'weekly_revenue' => Payment::whereBetween('created_at', [
+            'today_revenue' => (float) Payment::whereDate('created_at', today())->sum('amount'),
+
+            'weekly_revenue' => (float) Payment::whereBetween('created_at', [
                 Carbon::now()->startOfWeek(),
                 Carbon::now()->endOfWeek()
             ])->sum('amount'),
-            'monthly_revenue' => Payment::whereMonth('created_at', now()->month)->sum('amount'),
+
+            'monthly_revenue' => (float) Payment::whereMonth('created_at', now()->month)
+                ->sum('amount'),
         ];
     }
 
