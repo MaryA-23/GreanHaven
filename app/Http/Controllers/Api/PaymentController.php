@@ -205,7 +205,7 @@ class PaymentController extends Controller
             'order_id'         => 'required|exists:orders,id',
             'user_id'          => 'required|exists:users,id',
             'amount'           => 'required|numeric|min:0',
-            'status'           => 'in:unpaid,paid,pending,failed',
+            'status'           => 'in:pending,paid,failed',
             'payment_method'   => 'nullable|string',
             'gateway_reference'=> 'nullable|string',
             'paid_at'          => 'nullable|date',
@@ -226,55 +226,54 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Amount must match order total_price'], 400);
         }
 
-        // 🔥 FIND EXISTING PAYMENT (KEY FIX)
+        // 🔥 STEP 1: FIND EXISTING PAYMENT (NO DUPLICATES)
         $payment = Payment::where('order_id', $order->id)
             ->where('user_id', $user->id)
             ->first();
 
-        // IF EXISTS → UPDATE IT
+        $status = $request->status ?? 'pending';
+
+        // 🔥 STEP 2: UPDATE IF EXISTS
         if ($payment) {
 
             $payment->update([
                 'amount'            => $request->amount,
-                'status'            => $request->status ?? $payment->status,
+                'status'            => $status,
                 'payment_method'    => $request->payment_method ?? $payment->payment_method,
                 'gateway_reference' => $request->gateway_reference ?? $payment->gateway_reference,
-                'paid_at'           => $request->status === 'paid'
-                    ? ($request->paid_at ?? now())
-                    : $payment->paid_at,
+                'paid_at'           => $status === 'paid' ? now() : $payment->paid_at,
                 'notes'             => $request->notes ?? $payment->notes,
             ]);
 
         } else {
 
-            // OTHERWISE → CREATE NEW
+            // 🔥 STEP 3: CREATE ONLY ONCE
             $payment = Payment::create([
                 'order_id'          => $order->id,
                 'user_id'           => $user->id,
                 'amount'            => $request->amount,
-                'status'            => $request->status ?? 'unpaid',
+                'status'            => $status,
                 'payment_method'    => $request->payment_method,
                 'gateway_reference' => $request->gateway_reference,
-                'paid_at'           => $request->status === 'paid' ? now() : null,
+                'paid_at'           => $status === 'paid' ? now() : null,
                 'notes'             => $request->notes,
             ]);
         }
 
-        // CONFIRM ORDER IF PAID
-        if ($request->status === 'paid') {
+        // 🔥 STEP 4: CONFIRM ORDER ONLY WHEN PAID
+        if ($status === 'paid') {
             $order->update(['status' => 'confirmed']);
         }
 
         return response()->json([
             'message' => $payment->wasRecentlyCreated
-                ? 'Payment created successfully'
-                : 'Payment updated successfully',
+                ? 'Payment created (pending)'
+                : 'Payment updated',
 
             'payment' => $payment->load('order'),
         ], 201);
     }
-
-    /**
+        /**
      * Display the specified payment.
      */
     public function show(Request $request, Payment $payment): JsonResponse
