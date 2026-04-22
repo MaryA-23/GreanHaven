@@ -85,7 +85,7 @@ class ProductController extends Controller
             'description' => 'nullable|string',
             'unit' => 'required|string|max:50',
             'is_available' => 'nullable|boolean',
-            'status' => 'nullable|string|in:ready,not_ready',
+            'status' => 'nullable|in:active,inactive,out_of_stock'
         ]);
 
         //  CHECK IF PRODUCT ALREADY EXISTS
