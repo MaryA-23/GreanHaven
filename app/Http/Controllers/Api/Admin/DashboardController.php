@@ -68,10 +68,15 @@ class DashboardController extends Controller
                 'products.price',
                 DB::raw('SUM(order_items.quantity) as total_sold')
             )
-            ->groupBy('products.id', 'products.name', 'products.price')
-            ->orderByDesc('total_sold')
-            ->limit(5)
-            ->get();
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'price' => (float) $item->price,
+                    'total_sold' => (int) $item->total_sold,
+                ];
+            });
     }
     private function recentOrders()
     {
@@ -80,14 +85,14 @@ class DashboardController extends Controller
             ->limit(10)
             ->get()
             ->map(function ($order) {
-                return [
-                    'id' => $order->id,
-                   'customer' => $order->user->name ?? 'N/A',
-                    'total' => $order->total_price,
-                    'status' => $order->status,
-                    'payment_status' => $order->payment->status ?? 'unpaid',
-                    'date' => $order->created_at->format('Y-m-d H:i'),
-                ];
+               return [
+                'id' => $order->id,
+                'customer' => $order->customer_name,
+                'total' => (float) $order->total_price,
+                'status' => $order->status,
+                'payment_status' => $order->payment->status ?? 'unpaid',
+                'date' => $order->created_at->format('Y-m-d H:i'),
+            ];
             });
     }
 
