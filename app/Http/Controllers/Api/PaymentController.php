@@ -201,6 +201,16 @@ class PaymentController extends Controller
     {
         $user = $request->user();
 
+         if ($request->gateway_reference) {
+        $exists = Payment::where('gateway_reference', $request->gateway_reference)->first();
+
+        if ($exists) {
+            return response()->json([
+                'error' => 'This gateway reference has already been used'
+            ], 409);
+        }
+    }
+
         $request->validate([
             'order_id'         => 'required|exists:orders,id',
             'user_id'          => 'required|exists:users,id',
