@@ -32,7 +32,12 @@ class Order extends Model
 
     public function payments()
     {
-        return $this->hasMany(Payment::class);
+       Order::with(['user', 'payments']);
+    }
+
+    public function payment()
+    {
+        return $this->hasOne(Payment::class);
     }
 
 
