@@ -13,7 +13,9 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         $schedule->command('orders:cancel-unpaid')->everyFiveMinutes();
-         $schedule->command('payments:expire')->everyFiveMinutes();
+        
+          $schedule->command('app:expire-pending-payments')->everyFiveMinutes();
+          
     }
 
     /**

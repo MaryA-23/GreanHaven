@@ -27,10 +27,10 @@ class ExpirePendingPayments extends Command
      */
     public function handle()
     {
-        $count = Payment::where('status', 'pending')
-        ->where('created_at', '<', now()->subMinutes(30))
+      $count = Payment::where('status', 'pending')
+        ->where('created_at', '<', now()->subMinutes(10))
         ->update(['status' => 'failed']);
 
-    $this->info("$count pending payments expired.");
+    $this->info("Expired {$count} pending payments.");
     }
 }
