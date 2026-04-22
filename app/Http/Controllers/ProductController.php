@@ -85,7 +85,7 @@ class ProductController extends Controller
             'description' => 'nullable|string',
             'unit' => 'required|string|max:50',
             'is_available' => 'nullable|boolean',
-            'status' => 'nullable|in:active,inactive,out_of_stock'
+            
         ]);
 
         //  CHECK IF PRODUCT ALREADY EXISTS
@@ -110,13 +110,13 @@ class ProductController extends Controller
 
         // create new product
          $status = $validated['quantity'] > 0 ? 'active' : 'out_of_stock';
-
+        dd($status);
         $product = Product::create([
             ...$validated,
             'status' => $status,
             'is_available' => $validated['is_available'] ?? true,
         ]);
-        
+
         return response()->json([
             'success' => true,
             'message' => "{$product->name} has been added.",
