@@ -68,6 +68,9 @@ class DashboardController extends Controller
                 'products.price',
                 DB::raw('SUM(order_items.quantity) as total_sold')
             )
+            ->groupBy('products.id', 'products.name', 'products.price')
+            ->orderByDesc('total_sold')
+            ->limit(5)
             ->get()
             ->map(function ($item) {
                 return [
