@@ -109,8 +109,14 @@ class ProductController extends Controller
         }
 
         // create new product
-        $product = Product::create($validated);
+         $status = $validated['quantity'] > 0 ? 'active' : 'out_of_stock';
 
+        $product = Product::create([
+            ...$validated,
+            'status' => $status,
+            'is_available' => $validated['is_available'] ?? true,
+        ]);
+        
         return response()->json([
             'success' => true,
             'message' => "{$product->name} has been added.",
