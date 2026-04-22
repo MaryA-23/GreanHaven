@@ -127,67 +127,57 @@ class PaymentController extends Controller
      */
     public function callback(Request $request)
     {
-        // 1. Get reference
         $reference = $request->query('reference')
             ?? $request->input('reference')
             ?? data_get($request->all(), 'data.reference');
 
         if (!$reference) {
-            return response()->json([
-                'error' => 'No transaction reference provided'
-            ], 400);
+            return response()->json(['error' => 'Missing reference'], 400);
         }
 
-        // 2. Verify with Paystack
-        try {
-            $secret = config('services.paystack.secret');
+        $secret = config('services.paystack.secret');
 
-            $response = Http::withToken($secret)
-                ->get("https://api.paystack.co/transaction/verify/{$reference}");
-
-        } catch (\Throwable $e) {
-            return response()->json([
-                'error' => 'Payment verification failed'
-            ], 500);
-        }
+        $response = Http::withToken($secret)
+            ->get("https://api.paystack.co/transaction/verify/{$reference}");
 
         if ($response->failed()) {
-            return response()->json([
-                'error' => 'Verification failed',
-                'detail' => $response->body()
-            ], 400);
+            return response()->json(['error' => 'Verification failed'], 400);
         }
 
-        $body = $response->json();
-        $data = $body['data'] ?? null;
+        $data = $response->json()['data'];
 
-        if (!$data || !($body['status'] ?? false)) {
-            return response()->json([
-                'error' => 'Invalid Paystack response'
-            ], 400);
-        }
-
-        // 3. Extract values
-        $orderId = $data['metadata']['order_id'] ?? null;
-        $amount  = $data['amount'] / 100;
-        $ref     = $data['reference'];
-
-        if (!$orderId) {
-            return response()->json([
-                'error' => 'Order ID missing in metadata'
-            ], 400);
-        }
-
-        $order = Order::find($orderId);
+        $order = Order::find($data['metadata']['order_id']);
 
         if (!$order) {
-            return response()->json([
-                'error' => 'Order not found'
-            ], 404);
+            return response()->json(['error' => 'Order not found'], 404);
         }
 
-        // ✅ 4. THIS IS ALL YOU NEED
-        $payment = $this->recordPayment($order, $amount, $ref, 'paystack');
+        $amount = $data['amount'] / 100;
+        $ref = $data['reference'];
+
+        //  CLEAN UPSERT PAYMENT
+        $payment = Payment::updateOrCreate(
+            [
+                'order_id' => $order->id,
+                'user_id'  => $order->user_id,
+            ],
+            [
+                'amount'            => $amount,
+                'status'            => 'paid',
+                'payment_method'    => 'paystack',
+                'gateway_reference' => $ref,
+                'paid_at'           => now(),
+            ]
+        );
+
+        //  UPDATE ORDER + STOCK (ONLY ONCE)
+        if ($order->status !== 'confirmed') {
+            $order->update(['status' => 'confirmed']);
+
+            foreach ($order->items as $item) {
+                $item->product->decrement('quantity', $item->quantity);
+            }
+        }
 
         return response()->json([
             'message' => 'Payment verified successfully',
@@ -230,7 +220,7 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Amount mismatch'], 400);
         }
 
-        // 🔥 FIND EXISTING PAYMENT (ONE PER ORDER)
+        //  FIND EXISTING PAYMENT (ONE PER ORDER)
         $payment = Payment::where('order_id', $order->id)
             ->where('user_id', $user->id)
             ->first();
@@ -248,14 +238,14 @@ class PaymentController extends Controller
             ]);
         } else {
 
-            // 🔥 RULE 1: IF REFERENCE ALREADY EXISTS AND USER IS TRYING TO CHANGE IT
+            //  RULE 1: IF REFERENCE ALREADY EXISTS AND USER IS TRYING TO CHANGE IT
             if ($payment->gateway_reference && $request->gateway_reference && $payment->gateway_reference !== $request->gateway_reference) {
                 return response()->json([
                     'error' => 'Gateway reference already exists. Cannot override existing reference.'
                 ], 400);
             }
 
-            // 🔥 UPDATE PAYMENT (ALLOW NULL OR NEW REFERENCE)
+            //  UPDATE PAYMENT (ALLOW NULL OR NEW REFERENCE)
             $payment->update([
                 'amount'            => $request->amount,
                 'payment_method'    => $request->payment_method ?? $payment->payment_method,
@@ -334,5 +324,24 @@ class PaymentController extends Controller
         $payment->delete();
 
         return response()->json(['message' => 'Payment deleted successfully']);
+    }
+
+    public function reconciliation()
+    {
+        return response()->json([
+            'total_payments' => Payment::count(),
+            'paid' => Payment::where('status', 'paid')->count(),
+            'pending' => Payment::where('status', 'pending')->count(),
+            'failed' => Payment::where('status', 'failed')->count(),
+
+            'unmatched_orders' => Order::whereDoesntHave('payment')->count(),
+
+            'recent_failed_payments' => Payment::where('status', 'failed')
+                ->latest()
+                ->take(10)
+                ->get(),
+
+            'revenue' => Payment::where('status', 'paid')->sum('amount'),
+        ]);
     }
 }

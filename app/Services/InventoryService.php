@@ -3,6 +3,7 @@
 namespace App\Services;
 use App\Models\Product;
 use Illuminate\Validation\ValidationException;
+use App\Models\Payment;
 class InventoryService
 {
     /**
@@ -38,4 +39,13 @@ class InventoryService
         
         $product->save();
     }
+
+    public function expireOldPendingPayments()
+{
+    return Payment::where('status', 'pending')
+        ->where('created_at', '<', now()->subMinutes(30))
+        ->update([
+            'status' => 'failed'
+        ]);
+}
 }
