@@ -201,20 +201,14 @@ class PaymentController extends Controller
     {
         $user = $request->user();
 
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'order_id'         => 'required|exists:orders,id',
             'user_id'          => 'required|exists:users,id',
             'amount'           => 'required|numeric|min:0',
-            'status'           => 'in:pending,paid,failed',
             'payment_method'   => 'nullable|string',
             'gateway_reference'=> 'nullable|string',
-            'paid_at'          => 'nullable|date',
             'notes'            => 'nullable|string',
         ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
 
         $order = Order::find($request->order_id);
 
@@ -223,55 +217,47 @@ class PaymentController extends Controller
         }
 
         if ($request->amount != $order->total_price) {
-            return response()->json(['error' => 'Amount must match order total_price'], 400);
+            return response()->json(['error' => 'Amount mismatch'], 400);
         }
 
-        // 🔥 STEP 1: FIND EXISTING PAYMENT (NO DUPLICATES)
+        // 🔥 FIND EXISTING PAYMENT (ONE PER ORDER)
         $payment = Payment::where('order_id', $order->id)
             ->where('user_id', $user->id)
             ->first();
 
-        $status = $request->status ?? 'pending';
-
-        // 🔥 STEP 2: UPDATE IF EXISTS
-        if ($payment) {
-
-            $payment->update([
-                'amount'            => $request->amount,
-                'status'            => $status,
-                'payment_method'    => $request->payment_method ?? $payment->payment_method,
-                'gateway_reference' => $request->gateway_reference ?? $payment->gateway_reference,
-                'paid_at'           => $status === 'paid' ? now() : $payment->paid_at,
-                'notes'             => $request->notes ?? $payment->notes,
-            ]);
-
-        } else {
-
-            // 🔥 STEP 3: CREATE ONLY ONCE
+        if (!$payment) {
+            // CREATE FIRST TIME (NO REFERENCE)
             $payment = Payment::create([
                 'order_id'          => $order->id,
                 'user_id'           => $user->id,
                 'amount'            => $request->amount,
-                'status'            => $status,
+                'status'            => 'pending',
                 'payment_method'    => $request->payment_method,
-                'gateway_reference' => $request->gateway_reference,
-                'paid_at'           => $status === 'paid' ? now() : null,
+                'gateway_reference' => null,
                 'notes'             => $request->notes,
+            ]);
+        } else {
+
+            // 🔥 RULE 1: IF REFERENCE ALREADY EXISTS AND USER IS TRYING TO CHANGE IT
+            if ($payment->gateway_reference && $request->gateway_reference && $payment->gateway_reference !== $request->gateway_reference) {
+                return response()->json([
+                    'error' => 'Gateway reference already exists. Cannot override existing reference.'
+                ], 400);
+            }
+
+            // 🔥 UPDATE PAYMENT (ALLOW NULL OR NEW REFERENCE)
+            $payment->update([
+                'amount'            => $request->amount,
+                'payment_method'    => $request->payment_method ?? $payment->payment_method,
+                'gateway_reference' => $request->gateway_reference, // can become null or be updated
+                'notes'             => $request->notes ?? $payment->notes,
             ]);
         }
 
-        // 🔥 STEP 4: CONFIRM ORDER ONLY WHEN PAID
-        if ($status === 'paid') {
-            $order->update(['status' => 'confirmed']);
-        }
-
         return response()->json([
-            'message' => $payment->wasRecentlyCreated
-                ? 'Payment created (pending)'
-                : 'Payment updated',
-
+            'message' => 'Payment processed successfully',
             'payment' => $payment->load('order'),
-        ], 201);
+        ]);
     }
         /**
      * Display the specified payment.
