@@ -83,14 +83,14 @@ class DashboardController extends Controller
     }
     private function recentOrders()
     {
-        return Order::with(['user', 'payment'])
+        return Order::with(['user:id,name', 'payment:id,order_id,status'])
             ->latest()
             ->limit(10)
             ->get()
             ->map(function ($order) {
                return [
                 'id' => $order->id,
-                'customer' => $order->customer_name,
+                'customer' => $order->user->name ?? 'Guest',
                 'total' => (float) $order->total_price,
                 'status' => $order->status,
                 'payment_status' => $order->payment->status ?? 'unpaid',
