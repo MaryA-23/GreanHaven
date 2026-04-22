@@ -99,11 +99,21 @@ class DashboardController extends Controller
             });
     }
 
-    private function lowStockProducts()
-    {
-        return Product::whereColumn('quantity', '<=', 'low_stock_threshold')
-            ->orWhere('quantity', 0)
-            ->get(['id', 'name', 'quantity', 'low_stock_threshold']);
-    }
+  private function lowStockProducts()
+{
+    return Product::select('id', 'name', 'quantity', 'low_stock_threshold')
+        ->get()
+        ->map(function ($product) {
+            return [
+                'id' => $product->id,
+                'name' => $product->name,
+                'quantity' => $product->quantity,
+                'low_stock_threshold' => $product->low_stock_threshold,
+                'status' =>
+                    $product->quantity <= 0 ? 'out_of_stock' :
+                    ($product->quantity <= $product->low_stock_threshold ? 'low_stock' : 'ok')
+            ];
+        });
+}
 
 }
