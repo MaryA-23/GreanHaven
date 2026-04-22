@@ -74,8 +74,8 @@ class ProductController extends Controller
     public function store(Request $request): JsonResponse
     {
         if ($request->user()->role !== 'admin') {
-            return response()->json(['error' => 'Unauthorized. Only admins can add Products.'], 403);
-        }
+        return response()->json(['error' => 'Admin only'], 403);
+    }
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -129,16 +129,16 @@ class ProductController extends Controller
      */
     public function show(int $id): JsonResponse
     {
-        $veg = Product::withTrashed()->findOrFail($id);
+        $pro = Product::withTrashed()->findOrFail($id);
 
-        $message = $veg->status === 'ready'
-            ? "{$veg->name} is available now."
-            : "{$veg->name} is not ready yet. You can request it.";
+        $message = $pro->status === 'ready'
+            ? "{$pro->name} is available now."
+            : "{$pro->name} is not ready yet. You can request it.";
 
         return response()->json([
             'success' => true,
             'message' => $message,
-            'data' => new ProductResource($veg),
+            'data' => new ProductResource($pro),
         ]);
     }
 
@@ -151,7 +151,7 @@ class ProductController extends Controller
             return response()->json(['error' => 'Unauthorized. Only admins can update Products.'], 403);
         }
 
-        $veg = Product::findOrFail($id);
+        $pro = Product::findOrFail($id);
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
@@ -165,24 +165,24 @@ class ProductController extends Controller
             'status' => 'sometimes|in:active,inactive,out_of_stock',
         ]);
 
-        $oldStatus = $veg->status;
-        $veg->update($validated);
+        $oldStatus = $pro->status;
+        $pro->update($validated);
 
         Log::info("Product updated", [
-            'id' => $veg->id,
+            'id' => $pro->id,
             'old_status' => $oldStatus,
-            'new_status' => $veg->status,
+            'new_status' => $pro->status,
             'updated_fields' => array_keys($validated),
         ]);
 
-        if ($oldStatus !== 'ready' && ($validated['status'] ?? $oldStatus) === 'ready') {
-            ProductReady::dispatch($veg);
+        if ($oldStatus !== 'active' && $pro->status === 'active') {
+            ProductReady::dispatch($pro);
         }
 
         return response()->json([
             'success' => true,
-            'message' => "{$veg->name} has been updated.",
-            'data' => new ProductResource($veg),
+            'message' => "{$pro->name} has been updated.",
+            'data' => new ProductResource($pro),
         ]);
     }
 
@@ -195,8 +195,8 @@ class ProductController extends Controller
             return response()->json(['error' => 'Unauthorized. Only admins can delete Products.'], 403);
         }
 
-        $veg = Product::findOrFail($id);
-        $veg->delete();
+        $pro = Product::findOrFail($id);
+        $pro->delete();
 
         return response()->json([
             'success' => true,
@@ -213,15 +213,15 @@ class ProductController extends Controller
             return response()->json(['error' => 'Unauthorized. Only admins can restore Products.'], 403);
         }
 
-        $veg = Product::withTrashed()->findOrFail($id);
+        $pro = Product::withTrashed()->findOrFail($id);
 
-        if ($veg->trashed()) {
-            $veg->restore();
+        if ($pro->trashed()) {
+            $pro->restore();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Product restored successfully.',
-                'data' => new ProductResource($veg),
+                'data' => new ProductResource($pro),
             ]);
         }
 
