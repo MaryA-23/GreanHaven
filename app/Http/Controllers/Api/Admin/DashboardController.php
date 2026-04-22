@@ -109,6 +109,7 @@ class DashboardController extends Controller
                 'name' => $product->name,
                 'quantity' => $product->quantity,
                 'low_stock_threshold' => $product->low_stock_threshold,
+                'alert' => $product->quantity <= $product->low_stock_threshold,
                 'status' =>
                     $product->quantity <= 0 ? 'out_of_stock' :
                     ($product->quantity <= $product->low_stock_threshold ? 'low_stock' : 'ok')
