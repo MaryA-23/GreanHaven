@@ -125,7 +125,7 @@ protected $inventoryService;
             // 3. UPDATE ORDER TOTAL
             $order->update(['total_price' => $total]);
 
-            // 4. CREATE PAYMENT (PENDING)
+            // 4. CREATE PAYMENT
             Payment::updateOrCreate(
                 [
                     'order_id' => $order->id,
@@ -141,6 +141,18 @@ protected $inventoryService;
             );
 
             DB::commit();
+
+            // 5. SEND ORDER EMAIL (IMPORTANT FIX)
+            try {
+                Mail::send('emails.payment_pending', ['order' => $order], function ($message) use ($order) {
+
+                    $message->to($order->user->email)
+                        ->subject('Order Confirmed - Payment Pending');
+                });
+
+            } catch (\Exception $e) {
+                \Log::error("ORDER EMAIL FAILED: " . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
