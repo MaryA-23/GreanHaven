@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use App\Services\InventoryService;
 use App\Models\Payment;
+use Illuminate\Support\Facades\Mail;
 
 class OrderController extends Controller
 {
@@ -144,6 +145,17 @@ protected $inventoryService;
                 'paid_at' => null,
             ]
         );
+
+        Mail::send('emails.payment_pending', ['order' => $order], function ($message) use ($order) {
+
+    if (env('MAIL_MODE') === 'testing') {
+        $message->to('ayivorm@gmail.com');
+    } else {
+        $message->to($order->user->email);
+    }
+
+    $message->subject('Order Received - Payment Pending');
+});
 
         DB::commit();
 
