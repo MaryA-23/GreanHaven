@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use App\Services\InventoryService;
+use App\Models\Payment;
 
 class OrderController extends Controller
 {
@@ -79,17 +80,14 @@ protected $inventoryService;
                 'message' => 'You already have a pending order'
             ], 400);
         }
-        // merge duplicate product entries in the order
+
+        // merge duplicate products
         $mergedItems = [];
 
         foreach ($validated['items'] as $item) {
             $productId = $item['product_id'];
 
-            if (!isset($mergedItems[$productId])) {
-                $mergedItems[$productId] = $item['quantity'];
-            } else {
-                $mergedItems[$productId] += $item['quantity'];
-            }
+            $mergedItems[$productId] = ($mergedItems[$productId] ?? 0) + $item['quantity'];
         }
 
         DB::beginTransaction();
@@ -97,6 +95,7 @@ protected $inventoryService;
         try {
             $total = 0;
 
+            // 1. create order (temporary total = 0)
             $order = Order::create([
                 'user_id' => $user->id,
                 'company_id' => $user->company_id,
@@ -104,39 +103,51 @@ protected $inventoryService;
                 'total_price' => 0,
             ]);
 
-              foreach ($mergedItems as $productId => $quantity) {
+            foreach ($mergedItems as $productId => $quantity) {
 
-            $product = Product::where('id', $productId)
-                ->lockForUpdate()
-                ->first();
+                $product = Product::where('id', $productId)
+                    ->lockForUpdate()
+                    ->first();
 
-            if (!$product) {
-                throw new \Exception("Product not found");
+                if (!$product) {
+                    throw new \Exception("Product not found");
+                }
+
+                if ($product->status !== 'active') {
+                    throw new \Exception("Product {$product->name} is not available");
+                }
+
+                $this->inventoryService->deductStock($product, $quantity);
+
+                $subtotal = $product->price * $quantity;
+
+                $order->items()->create([
+                    'product_id' => $product->id,
+                    'quantity'   => $quantity,
+                    'price'      => $product->price,
+                    'subtotal'   => $subtotal,
+                ]);
+
+                $total += $subtotal;
             }
 
-            //  Prevent ordering inactive/out of stock
-            if ($product->status !== 'active') {
-                throw new \Exception("Product {$product->name} is not available");
-            }
-
-            //  Use inventory service (handles stock + status)
-            $this->inventoryService->deductStock($product, $quantity);
-
-            $subtotal = $product->price * $quantity;
-
-            //  Create order item (NO DUPLICATES)
-            $order->items()->create([
-                'product_id' => $product->id,
-                'quantity'   => $quantity,
-                'price'      => $product->price,
-                'subtotal'   => $subtotal,
-            ]);
-
-            $total += $subtotal;
-        }
-
-
+            // 2. update order total
             $order->update(['total_price' => $total]);
+
+            // 3. CREATE / UPDATE PAYMENT 
+            Payment::updateOrCreate(
+                [
+                    'order_id' => $order->id,
+                    'user_id'  => $user->id,
+                ],
+                [
+                    'amount' => $total,
+                    'status' => 'pending',
+                    'payment_method' => null,
+                    'gateway_reference' => null,
+                    'paid_at' => null,
+                ]
+            );
 
             DB::commit();
 
