@@ -41,5 +41,18 @@ class Product extends Model
         return $this->quantity <= $this->low_stock_threshold && $this->quantity > 0;
     }
 
+    protected static function booted()
+    {
+        static::saving(function ($product) {
+            if ($product->quantity <= 0) {
+                $product->status = 'out_of_stock';
+            } elseif ($product->quantity <= 5) {
+                $product->status = 'low_stock';
+            } else {
+                $product->status = 'active';
+            }
+        });
+    }
+
 }
 
