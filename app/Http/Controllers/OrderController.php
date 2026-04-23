@@ -146,17 +146,15 @@ protected $inventoryService;
             ]
         );
 
-        Mail::send('emails.payment_pending', ['order' => $order], function ($message) use ($order) {
-
+     Mail::send('emails.payment_pending', ['order' => $order], function ($message) use ($order) {
     if (env('MAIL_MODE') === 'testing') {
         $message->to('ayivorm@gmail.com');
     } else {
         $message->to($order->user->email);
     }
-
     $message->subject('Order Received - Payment Pending');
-});
-
+      });  // ← ADD THESE TWO CHARACTERS!
+      
         DB::commit();
 
         return response()->json([
