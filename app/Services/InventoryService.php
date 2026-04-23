@@ -19,11 +19,13 @@ class InventoryService
 
         $product->quantity -= $quantity;
 
-        // ✅ Status logic
-        if ($product->quantity > 0) {
-            $product->status = 'active';           
+        // FIXED STATUS LOGIC
+        if ($product->quantity <= 0) {
+            $product->status = 'out_of_stock';
+        } elseif ($product->quantity <= 5) {
+            $product->status = 'low_stock';   // optional but VERY useful
         } else {
-            $product->status = 'out_of_stock';    
+            $product->status = 'active';
         }
 
         $product->save();
