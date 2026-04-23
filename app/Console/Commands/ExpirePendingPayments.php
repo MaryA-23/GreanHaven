@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Payment;
+use Illuminate\Support\Facades\DB;
 
 
 class ExpirePendingPayments extends Command
@@ -26,30 +27,34 @@ class ExpirePendingPayments extends Command
      * Execute the console command.
      */
   public function handle()
-    {
+{
+    $expiredCount = Payment::where('status', 'pending')
+        ->where('created_at', '<', now()->subMinutes(10))
+        ->count();
+
+    if ($expiredCount === 0) {
+        $this->info('No expired payments.');
+        return;
+    }
+
+    DB::transaction(function () {
         $expiredPayments = Payment::where('status', 'pending')
-            ->where('created_at', '<', now()->subMinutes(30))
+            ->where('created_at', '<', now()->subMinutes(10))
             ->with('order.items.product')
             ->get();
 
         foreach ($expiredPayments as $payment) {
-
             $payment->update(['status' => 'failed']);
 
-            $order = $payment->order;
-
-            if ($order && $order->status !== 'cancelled') {
-
-                foreach ($order->items as $item) {
-                    if ($item->product) {
-                        $item->product->increment('quantity', $item->quantity);
-                    }
+            if ($payment->order && $payment->order->status !== 'cancelled') {
+                foreach ($payment->order->items as $item) {
+                    $item->product?->increment('quantity', $item->quantity);
                 }
-
-                $order->update(['status' => 'cancelled']);
+                $payment->order->update(['status' => 'cancelled']);
             }
         }
+    });
 
-        $this->info("Expired {$expiredPayments->count()} pending payments.");
-    }
+    $this->info("✅ Expired {$expiredCount} payments → failed + stock restored.");
+}
 }

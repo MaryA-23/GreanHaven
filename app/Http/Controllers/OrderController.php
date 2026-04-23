@@ -95,6 +95,12 @@ protected $inventoryService;
         try {
             $total = 0;
 
+        DB::transaction(function () use ($request) {
+        foreach ($request->items as $item) {
+            $product = Product::findOrFail($item['product_id']);
+            $this->inventory->deductStock($product, $item['quantity']);  // Throws if insufficient
+        }
+
             // 1. create order (temporary total = 0)
             $order = Order::create([
                 'user_id' => $user->id,

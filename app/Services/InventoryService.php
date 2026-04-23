@@ -43,7 +43,7 @@ class InventoryService
     public function expireOldPendingPayments()
 {
     return Payment::where('status', 'pending')
-        ->where('created_at', '<', now()->subMinutes(30))
+        ->where('created_at', '<', now()->subMinutes(10))
         ->update([
             'status' => 'failed'
         ]);

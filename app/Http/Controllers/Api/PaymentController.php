@@ -12,6 +12,9 @@ use Illuminate\Http\JsonResponse;
 use Unicodeveloper\Paystack\Facades\Paystack;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\PaymentSuccessMail;
+use App\Notifications\PaymentSuccessfulNotification;
 
 class PaymentController extends Controller
 {
@@ -155,29 +158,17 @@ class PaymentController extends Controller
         $amount = $data['amount'] / 100;
         $ref = $data['reference'];
 
-        //  CLEAN UPSERT PAYMENT
-        $payment = Payment::updateOrCreate(
-            [
-                'order_id' => $order->id,
-                'user_id'  => $order->user_id,
-            ],
-            [
-                'amount'            => $amount,
-                'status'            => 'paid',
-                'payment_method'    => 'paystack',
-                'gateway_reference' => $ref,
-                'paid_at'           => now(),
-            ]
+        // USE YOUR FUNCTION HERE
+        $payment = $this->recordPayment($order, $amount, $ref, 'paystack');
+
+        // NOTIFICATION
+        $order->user->notify(
+            new PaymentSuccessfulNotification($order)
         );
 
-        //  UPDATE ORDER + STOCK (ONLY ONCE)
-        if ($order->status !== 'confirmed') {
-            $order->update(['status' => 'confirmed']);
-
-            foreach ($order->items as $item) {
-                $item->product->decrement('quantity', $item->quantity);
-            }
-        }
+        // EMAIL
+        Mail::to($order->user->email)
+            ->send(new PaymentSuccessMail($order));
 
         return response()->json([
             'message' => 'Payment verified successfully',
