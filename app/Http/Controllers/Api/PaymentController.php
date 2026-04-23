@@ -65,7 +65,7 @@ class PaymentController extends Controller
         $order = Order::with('user')->findOrFail($request->order_id);
 
         $paymentData = [
-            'amount' => $order->total_price * 100, // Paystack expects amount in kobo
+            'amount' => $order->total_price * 100,
             'email' => $order->user->email,
             'metadata' => ['order_id' => $order->id],
         ];
@@ -73,18 +73,26 @@ class PaymentController extends Controller
         try {
             $authorization = Paystack::getAuthorizationUrl($paymentData);
 
-            return response()->json([
-                'authorization_url' => $authorization->url
-            ]);
+            // ✅ KEY FIX: detect request type
+            if ($request->expectsJson()) {
+                // Postman / frontend
+                return response()->json([
+                    'authorization_url' => $authorization->url
+                ]);
+            }
+
+            // ✅ Email click → redirect user
+            return redirect($authorization->url);
+
         } catch (\Exception $e) {
             Log::error('Paystack initialize failed', ['message' => $e->getMessage()]);
+
             return response()->json([
                 'error' => 'Payment initialization failed',
                 'message' => $e->getMessage()
             ], 500);
         }
     }
-
     /**
      * Record a new payment.
      */

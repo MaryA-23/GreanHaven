@@ -93,6 +93,7 @@ Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
     Route::delete('/{payment}', [PaymentController::class, 'destroy']); // Delete payment
     // Initialize Paystack payment (authenticated)
     Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
+    Route::get('/payments/paystack/initialize', [PaymentController::class, 'initialize']);
 });
 // Public callback from Paystack (no auth)
 Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback']);

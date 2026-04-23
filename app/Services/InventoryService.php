@@ -34,13 +34,22 @@ class InventoryService
 
     }
 
-    public function expireOldPendingPayments()
+     public function expireOldPendingPayments()
     {
-        return Payment::where('status', 'pending')
+        $payments = Payment::with('order.items.product')
+            ->where('status', 'pending')
             ->where('created_at', '<', now()->subMinutes(10))
-            ->update([
-                'status' => 'failed'
-            ]);
+            ->get();
+
+        foreach ($payments as $payment) {
+
+            $payment->update(['status' => 'failed']);
+
+            // RESTORE STOCK
+            foreach ($payment->order->items as $item) {
+                $this->addStock($item->product, $item->quantity);
+            }
+        }
     }
 
     private function syncStatus(Product $product)
