@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use App\Services\InventoryService;
 use App\Models\Payment;
 use Illuminate\Support\Facades\Mail;
+       
 
 class OrderController extends Controller
 {
@@ -57,120 +58,105 @@ protected $inventoryService;
     /**
      * Create a new order (user).
      */
-   public function store(Request $request): JsonResponse
- {
-    $validated = $request->validate([
-        'items' => 'required|array|min:1',
-        'items.*.product_id' => 'required|exists:products,id',
-        'items.*.quantity' => 'required|integer|min:1',
-    ]);
-
-    $user = $request->user();
-
-    if (!$user) {
-        return response()->json(['error' => 'Unauthenticated'], 401);
-    }
-
-    $existingOrder = Order::where('user_id', $user->id)
-        ->where('status', 'pending')
-        ->first();
-
-    if ($existingOrder) {
-        return response()->json([
-            'message' => 'You already have a pending order'
-        ], 400);
-    }
-
-    $mergedItems = [];
-
-    foreach ($validated['items'] as $item) {
-        $mergedItems[$item['product_id']] =
-            ($mergedItems[$item['product_id']] ?? 0) + $item['quantity'];
-    }
-
-    try {
-        DB::beginTransaction();
-
-        $total = 0;
-
-        // 1. Create order
-        $order = Order::create([
-            'user_id' => $user->id,
-            'company_id' => $user->company_id,
-            'status' => 'pending',
-            'total_price' => 0,
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.quantity' => 'required|integer|min:1',
         ]);
 
-        foreach ($mergedItems as $productId => $quantity) {
+        $user = $request->user();
 
-            $product = Product::lockForUpdate()->find($productId);
+        $existingOrder = Order::where('user_id', $user->id)
+            ->where('status', 'pending')
+            ->first();
 
-            if (!$product) {
-                throw new \Exception("Product not found");
-            }
-
-            if ($product->status !== 'active') {
-                throw new \Exception("Product {$product->name} is not available");
-            }
-
-            // FIXED SERVICE NAME
-            $this->inventoryService->deductStock($product, $quantity);
-
-            $subtotal = $product->price * $quantity;
-
-            $order->items()->create([
-                'product_id' => $product->id,
-                'quantity'   => $quantity,
-                'price'      => $product->price,
-                'subtotal'   => $subtotal,
-            ]);
-
-            $total += $subtotal;
+        if ($existingOrder) {
+            return response()->json([
+                'message' => 'You already have a pending order'
+            ], 400);
         }
 
-        // 2. update order total
-        $order->update(['total_price' => $total]);
+        $mergedItems = [];
 
-        // 3. payment
-        Payment::updateOrCreate(
-            [
-                'order_id' => $order->id,
-                'user_id'  => $user->id,
-            ],
-            [
-                'amount' => $total,
+        foreach ($validated['items'] as $item) {
+            $mergedItems[$item['product_id']] =
+                ($mergedItems[$item['product_id']] ?? 0) + $item['quantity'];
+        }
+
+        DB::beginTransaction();
+
+        try {
+
+            $total = 0;
+
+            // 1. CREATE ORDER
+            $order = Order::create([
+                'user_id' => $user->id,
+                'company_id' => $user->company_id,
                 'status' => 'pending',
-                'payment_method' => null,
-                'gateway_reference' => null,
-                'paid_at' => null,
-            ]
-        );
+                'total_price' => 0,
+            ]);
 
-     Mail::send('emails.payment_pending', ['order' => $order], function ($message) use ($order) {
-    if (env('MAIL_MODE') === 'testing') {
-        $message->to('ayivorm@gmail.com');
-    } else {
-        $message->to($order->user->email);
+            // 2. CREATE ITEMS + DEDUCT STOCK
+            foreach ($mergedItems as $productId => $quantity) {
+
+                $product = Product::lockForUpdate()->findOrFail($productId);
+
+                if ($product->status !== 'active') {
+                    throw new \Exception("Product {$product->name} not available");
+                }
+
+                $this->inventoryService->deductStock($product, $quantity);
+
+                $subtotal = $product->price * $quantity;
+
+                $order->items()->create([
+                    'product_id' => $product->id,
+                    'quantity'   => $quantity,
+                    'price'      => $product->price,
+                    'subtotal'   => $subtotal,
+                ]);
+
+                $total += $subtotal;
+            }
+
+            // 3. UPDATE ORDER TOTAL
+            $order->update(['total_price' => $total]);
+
+            // 4. CREATE PAYMENT (PENDING)
+            Payment::updateOrCreate(
+                [
+                    'order_id' => $order->id,
+                    'user_id'  => $user->id,
+                ],
+                [
+                    'amount' => $total,
+                    'status' => 'pending',
+                    'payment_method' => null,
+                    'gateway_reference' => null,
+                    'paid_at' => null,
+                ]
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order created successfully',
+                'data' => $order->load('items.product'),
+            ], 201);
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 400);
+        }
     }
-    $message->subject('Order Received - Payment Pending');
-      });  // ← ADD THESE TWO CHARACTERS!
-      
-        DB::commit();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Order placed successfully.',
-            'data' => $order->load('items.product'),
-        ], 201);
-
-    } catch (\Exception $e) {
-        DB::rollBack();
-
-        return response()->json([
-            'error' => $e->getMessage()
-        ], 400);
-    }
-  }
 
     /**
      * Show a single order.

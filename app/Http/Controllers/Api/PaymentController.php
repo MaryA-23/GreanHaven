@@ -13,8 +13,7 @@ use Unicodeveloper\Paystack\Facades\Paystack;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use App\Mail\PaymentSuccessMail;
-use App\Notifications\PaymentSuccessfulNotification;
+use Illuminate\Support\Facades\DB;  
 
 class PaymentController extends Controller
 {
@@ -149,40 +148,67 @@ class PaymentController extends Controller
 
         $data = $response->json()['data'];
 
-        $order = Order::find($data['metadata']['order_id']);
+        $order = Order::with('user')->find($data['metadata']['order_id']);
 
         if (!$order) {
             return response()->json(['error' => 'Order not found'], 404);
         }
 
-        $amount = $data['amount'] / 100;
-        $ref = $data['reference'];
+        DB::beginTransaction();
 
-        // USE YOUR FUNCTION HERE
-        $payment = $this->recordPayment($order, $amount, $ref, 'paystack');
+        try {
 
-        // NOTIFICATION
-        $order->user->notify(
-            new PaymentSuccessfulNotification($order)
-        );
+            $amount = $data['amount'] / 100;
+            $ref = $data['reference'];
 
-        // EMAIL
-       Mail::send('emails.payment_success', ['order' => $order], function ($message) use ($order) {
+            // 1. update payment
+            $payment = Payment::updateOrCreate(
+                [
+                    'order_id' => $order->id,
+                    'user_id' => $order->user_id,
+                ],
+                [
+                    'amount' => $amount,
+                    'status' => 'paid',
+                    'payment_method' => 'paystack',
+                    'gateway_reference' => $ref,
+                    'paid_at' => now(),
+                ]
+            );
 
-    if (env('MAIL_MODE') === 'testing') {
-        $message->to('ayivorm@gmail.com'); // YOUR EMAIL ONLY (testing)
-    } else {
-        $message->to($order->user->email); // REAL CUSTOMER
-    }
+            // 2. update order
+            $order->update(['status' => 'completed']);
 
-    $message->subject('Payment Successful - GreenHaven');
-    });
-      
-        return response()->json([
-            'message' => 'Payment verified and recorded successfully',
-            'payment' => $payment->load('order'),
-        ]);
+            DB::commit();
 
+            // 3. EMAIL (AFTER COMMIT)
+            try {
+                Mail::send('emails.payment_success', ['order' => $order], function ($message) use ($order) {
+
+                    $to = env('MAIL_MODE') === 'testing'
+                        ? 'ayivorm@gmail.com'
+                        : $order->user->email;
+
+                    $message->to($to);
+                    $message->subject('Payment Successful - GreenHaven');
+                });
+
+            } catch (\Exception $e) {
+                Log::error("EMAIL FAILED: " . $e->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Payment verified successfully',
+                'payment' => $payment
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 400);
+        }
     }
     /**
      * Store a newly created payment for an order (manual entry).
