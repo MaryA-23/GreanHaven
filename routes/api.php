@@ -117,3 +117,7 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index']);
 });
 
+Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    Route::post('/products', [ProductController::class, 'store']);
+    Route::post('/categories', [CategoryController::class, 'store']);
+});
