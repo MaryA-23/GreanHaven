@@ -167,13 +167,22 @@ class PaymentController extends Controller
         );
 
         // EMAIL
-        Mail::to($order->user->email)
-            ->send(new PaymentSuccessMail($order));
+       Mail::send('emails.payment_success', ['order' => $order], function ($message) use ($order) {
 
+    if (env('MAIL_MODE') === 'testing') {
+        $message->to('ayivorm@gmail.com'); // YOUR EMAIL ONLY (testing)
+    } else {
+        $message->to($order->user->email); // REAL CUSTOMER
+    }
+
+    $message->subject('Payment Successful - GreenHaven');
+    });
+      
         return response()->json([
-            'message' => 'Payment verified successfully',
+            'message' => 'Payment verified and recorded successfully',
             'payment' => $payment->load('order'),
         ]);
+
     }
     /**
      * Store a newly created payment for an order (manual entry).
