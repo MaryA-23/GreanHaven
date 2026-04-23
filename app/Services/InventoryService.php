@@ -19,14 +19,7 @@ class InventoryService
 
         $product->quantity -= $quantity;
 
-        // FIXED STATUS LOGIC
-        if ($product->quantity <= 0) {
-            $product->status = 'out_of_stock';
-        } elseif ($product->quantity <= 5) {
-            $product->status = 'low_stock';   // optional but VERY useful
-        } else {
-            $product->status = 'active';
-        }
+        $this->syncStatus($product);
 
         $product->save();
     }
@@ -34,20 +27,30 @@ class InventoryService
     public function addStock(Product $product, int $quantity)
     {
         $product->quantity += $quantity;
-        
-        if ($product->quantity > 0) {
-            $product->status = 'active';           
-        }
-        
+
+        $this->syncStatus($product);
+
         $product->save();
+
     }
 
     public function expireOldPendingPayments()
-{
-    return Payment::where('status', 'pending')
-        ->where('created_at', '<', now()->subMinutes(10))
-        ->update([
-            'status' => 'failed'
-        ]);
-}
+    {
+        return Payment::where('status', 'pending')
+            ->where('created_at', '<', now()->subMinutes(10))
+            ->update([
+                'status' => 'failed'
+            ]);
+    }
+
+    private function syncStatus(Product $product)
+    {
+        if ($product->quantity <= 0) {
+            $product->status = 'out_of_stock';
+        } elseif ($product->quantity <= 5) {
+            $product->status = 'low_stock';
+        } else {
+            $product->status = 'active';
+        }
+    }
 }
