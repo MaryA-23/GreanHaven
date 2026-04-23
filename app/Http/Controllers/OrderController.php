@@ -56,121 +56,111 @@ protected $inventoryService;
     /**
      * Create a new order (user).
      */
-    public function store(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|exists:products,id',
-            'items.*.quantity' => 'required|integer|min:1',
-        ]);
+   public function store(Request $request): JsonResponse
+ {
+    $validated = $request->validate([
+        'items' => 'required|array|min:1',
+        'items.*.product_id' => 'required|exists:products,id',
+        'items.*.quantity' => 'required|integer|min:1',
+    ]);
 
-        $user = $request->user();
+    $user = $request->user();
 
-        if (!$user) {
-            return response()->json(['error' => 'Unauthenticated'], 401);
-        }
+    if (!$user) {
+        return response()->json(['error' => 'Unauthenticated'], 401);
+    }
 
-        // prevent multiple pending orders
-        $existingOrder = Order::where('user_id', $user->id)
-            ->where('status', 'pending')
-            ->first();
+    $existingOrder = Order::where('user_id', $user->id)
+        ->where('status', 'pending')
+        ->first();
 
-        if ($existingOrder) {
-            return response()->json([
-                'message' => 'You already have a pending order'
-            ], 400);
-        }
+    if ($existingOrder) {
+        return response()->json([
+            'message' => 'You already have a pending order'
+        ], 400);
+    }
 
-        // merge duplicate products
-        $mergedItems = [];
+    $mergedItems = [];
 
-        foreach ($validated['items'] as $item) {
-            $productId = $item['product_id'];
+    foreach ($validated['items'] as $item) {
+        $mergedItems[$item['product_id']] =
+            ($mergedItems[$item['product_id']] ?? 0) + $item['quantity'];
+    }
 
-            $mergedItems[$productId] = ($mergedItems[$productId] ?? 0) + $item['quantity'];
-        }
-
+    try {
         DB::beginTransaction();
 
-        try {
-            $total = 0;
+        $total = 0;
 
-        DB::transaction(function () use ($request) {
-        foreach ($request->items as $item) {
-            $product = Product::findOrFail($item['product_id']);
-            $this->inventory->deductStock($product, $item['quantity']);  // Throws if insufficient
-        }
+        // 1. Create order
+        $order = Order::create([
+            'user_id' => $user->id,
+            'company_id' => $user->company_id,
+            'status' => 'pending',
+            'total_price' => 0,
+        ]);
 
-            // 1. create order (temporary total = 0)
-            $order = Order::create([
-                'user_id' => $user->id,
-                'company_id' => $user->company_id,
-                'status' => 'pending',
-                'total_price' => 0,
-            ]);
+        foreach ($mergedItems as $productId => $quantity) {
 
-            foreach ($mergedItems as $productId => $quantity) {
+            $product = Product::lockForUpdate()->find($productId);
 
-                $product = Product::where('id', $productId)
-                    ->lockForUpdate()
-                    ->first();
-
-                if (!$product) {
-                    throw new \Exception("Product not found");
-                }
-
-                if ($product->status !== 'active') {
-                    throw new \Exception("Product {$product->name} is not available");
-                }
-
-                $this->inventoryService->deductStock($product, $quantity);
-
-                $subtotal = $product->price * $quantity;
-
-                $order->items()->create([
-                    'product_id' => $product->id,
-                    'quantity'   => $quantity,
-                    'price'      => $product->price,
-                    'subtotal'   => $subtotal,
-                ]);
-
-                $total += $subtotal;
+            if (!$product) {
+                throw new \Exception("Product not found");
             }
 
-            // 2. update order total
-            $order->update(['total_price' => $total]);
+            if ($product->status !== 'active') {
+                throw new \Exception("Product {$product->name} is not available");
+            }
 
-            // 3. CREATE / UPDATE PAYMENT 
-            Payment::updateOrCreate(
-                [
-                    'order_id' => $order->id,
-                    'user_id'  => $user->id,
-                ],
-                [
-                    'amount' => $total,
-                    'status' => 'pending',
-                    'payment_method' => null,
-                    'gateway_reference' => null,
-                    'paid_at' => null,
-                ]
-            );
+            // FIXED SERVICE NAME
+            $this->inventoryService->deductStock($product, $quantity);
 
-            DB::commit();
+            $subtotal = $product->price * $quantity;
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Order placed successfully.',
-                'data' => $order->load('items.product'),
-            ], 201);
+            $order->items()->create([
+                'product_id' => $product->id,
+                'quantity'   => $quantity,
+                'price'      => $product->price,
+                'subtotal'   => $subtotal,
+            ]);
 
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            return response()->json([
-                'error' => $e->getMessage()
-            ], 400);
+            $total += $subtotal;
         }
+
+        // 2. update order total
+        $order->update(['total_price' => $total]);
+
+        // 3. payment
+        Payment::updateOrCreate(
+            [
+                'order_id' => $order->id,
+                'user_id'  => $user->id,
+            ],
+            [
+                'amount' => $total,
+                'status' => 'pending',
+                'payment_method' => null,
+                'gateway_reference' => null,
+                'paid_at' => null,
+            ]
+        );
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order placed successfully.',
+            'data' => $order->load('items.product'),
+        ], 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+
+        return response()->json([
+            'error' => $e->getMessage()
+        ], 400);
     }
+  }
 
     /**
      * Show a single order.
