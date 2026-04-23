@@ -143,17 +143,16 @@ protected $inventoryService;
             DB::commit();
 
             // 5. SEND ORDER EMAIL (IMPORTANT FIX)
-            try {
-                Mail::send('emails.payment_pending', ['order' => $order], function ($message) use ($order) {
+          $paymentUrl = url("/payment/initialize?order_id=" . $order->id);
 
-                    $message->to($order->user->email)
-                        ->subject('Order Confirmed - Payment Pending');
-                });
+            Mail::send('emails.payment_pending', [
+                'order' => $order,
+                'paymentUrl' => $paymentUrl
+            ], function ($message) use ($order) {
 
-            } catch (\Exception $e) {
-                \Log::error("ORDER EMAIL FAILED: " . $e->getMessage());
-            }
-
+                $message->to($order->user->email);
+                $message->subject('Order Received - Pay Now');
+            });
             return response()->json([
                 'success' => true,
                 'message' => 'Order created successfully',
