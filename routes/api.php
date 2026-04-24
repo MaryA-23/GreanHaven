@@ -37,15 +37,20 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
   // Route::apiResource('farms', FarmController::class);
 });
 
+Route::prefix('products')->group(function () {
 
-      Route::get('products', [ProductController::class, 'index']);
-      Route::get('products/{id}', [ProductController::class, 'show']);
-      Route::middleware('auth:sanctum')->group(function () {
-      Route::post('products', [ProductController::class, 'store']);
-      Route::put('products/{id}', [ProductController::class, 'update']);
-      Route::delete('products/{id}', [ProductController::class, 'destroy']);
-      Route::post('products/{id}/restore', [ProductController::class, 'restore']);
-  });
+    // Public/customer browsing
+    Route::get('/', [ProductController::class, 'index']);
+    Route::get('/{id}', [ProductController::class, 'show']);
+
+    // Admin product management
+    Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+        Route::post('/', [ProductController::class, 'store']);
+        Route::patch('/{id}', [ProductController::class, 'update']);
+        Route::delete('/{id}', [ProductController::class, 'destroy']);
+        Route::patch('/{id}/restore', [ProductController::class, 'restore']);
+    });
+});
 
         Route::get('categories', [CategoryController::class, 'index']);
         Route::get('categories/{id}', [CategoryController::class, 'show']);
@@ -58,21 +63,26 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
   
 // Orders routes
 Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
-    // Normal users: can place orders & view only their own
+
     Route::middleware('role:user')->group(function () {
-        Route::post('/', [OrderController::class, 'store']);      // Place order
-        Route::get('/my', [OrderController::class, 'index']);    // Only their orders
-        Route::get('/{id}', [OrderController::class, 'show']);   // View single order (owned)
+        Route::post('/', [OrderController::class, 'store']);
+        Route::get('/my', [OrderController::class, 'index']);
+        Route::get('/{id}', [OrderController::class, 'show']);
+        Route::patch('/{id}/cancel', [OrderController::class, 'cancel']);
     });
-    // Company: can view only company orders
+
     Route::middleware('role:company')->group(function () {
-        Route::get('/company', [OrderController::class, 'index']); // Company orders
+        Route::get('/company', [OrderController::class, 'index']);
+        Route::get('/company/{id}', [OrderController::class, 'show']);
     });
-    // Admin: can view all orders, update, delete
+
     Route::middleware('role:admin')->group(function () {
-        Route::get('/', [OrderController::class, 'index']);            // All orders
-        Route::patch('/{id}/status', [OrderController::class, 'update']);  // Update order status
-        Route::delete('/{id}', [OrderController::class, 'destroy']);       // Delete order
+        Route::get('/', [OrderController::class, 'index']);
+        Route::get('/{id}', [OrderController::class, 'show']);
+        Route::patch('/{id}/processing', [OrderController::class, 'markAsProcessing']);
+        Route::patch('/{id}/completed', [OrderController::class, 'markAsCompleted']);
+        Route::patch('/{id}/cancel', [OrderController::class, 'adminCancel']);
+        Route::patch('/{id}/expire', [OrderController::class, 'adminExpire']);
     });
 });
 

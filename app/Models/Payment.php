@@ -10,22 +10,25 @@ class Payment extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id',
-        'user_id',
-        'amount',
-        'status',
-        'payment_method',
-        'gateway_reference',
-        'paid_at',
-        'notes',
+    'order_id',
+    'user_id',
+    'amount',
+    'status',
+    'payment_method',
+    'gateway_reference',
+    'paid_at',
+    'expires_at',
+    'expired_at',
+    'notes',
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2',
-        'paid_at' => 'datetime',
+    'amount' => 'decimal:2',
+    'paid_at' => 'datetime',
+    'expires_at' => 'datetime',
+    'expired_at' => 'datetime',
     ];
-
-    // Relationships
+        // Relationships
     public function order()
     {
         return $this->belongsTo(Order::class);
@@ -37,9 +40,14 @@ class Payment extends Model
     }
 
     // Scopes for easy querying (e.g., in API)
-    public function scopeUnpaid($query)
+    public function scopePending($query)
     {
-        return $query->where('status', 'unpaid');
+        return $query->where('status', 'pending');
+    }
+
+    public function scopeExpired($query)
+    {
+        return $query->where('status', 'expired');
     }
 
     public function scopePaid($query)

@@ -145,47 +145,50 @@ class ProductController extends Controller
     /**
      * Update Product details (Admin only).
      */
-    public function update(Request $request, int $id): JsonResponse
+     public function update(Request $request, int $id): JsonResponse
     {
         if ($request->user()->role !== 'admin') {
-            return response()->json(['error' => 'Unauthorized. Only admins can update Products.'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only admins can update products.',
+            ], 403);
         }
 
-        $pro = Product::findOrFail($id);
+        $product = Product::findOrFail($id);
 
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'price' => 'sometimes|numeric|min:0',
             'quantity' => 'sometimes|integer|min:0',
-            'category_id' => 'required|exists:categories,id',
+            'category_id' => 'sometimes|exists:categories,id',
             'description' => 'nullable|string',
             'unit' => 'sometimes|string|max:50',
-            'is_available' => 'nullable|boolean',
+            'is_available' => 'sometimes|boolean',
             'supplier' => 'nullable|string|max:255',
-            'status' => 'sometimes|in:active,inactive,out_of_stock',
+            'status' => 'sometimes|in:active,inactive,out_of_stock,low_stock',
         ]);
 
-        $oldStatus = $pro->status;
-        $pro->update($validated);
+        $oldStatus = $product->status;
 
-        Log::info("Product updated", [
-            'id' => $pro->id,
+        $product->update($validated);
+
+        Log::info('Product updated', [
+            'id' => $product->id,
             'old_status' => $oldStatus,
-            'new_status' => $pro->status,
+            'new_status' => $product->status,
             'updated_fields' => array_keys($validated),
         ]);
 
-        if ($oldStatus !== 'active' && $pro->status === 'active') {
-            ProductReady::dispatch($pro);
+        if ($oldStatus !== 'active' && $product->status === 'active') {
+            ProductReady::dispatch($product);
         }
 
         return response()->json([
             'success' => true,
-            'message' => "{$pro->name} has been updated.",
-            'data' => new ProductResource($pro),
+            'message' => "{$product->name} has been updated.",
+            'data' => new ProductResource($product->fresh('category')),
         ]);
     }
-
     /**
      * Soft delete a Product (Admin only).
      */

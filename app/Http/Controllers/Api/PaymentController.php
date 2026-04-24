@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Order;
+use App\Models\Product;
 use App\Http\Resources\PaymentResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -62,30 +63,61 @@ class PaymentController extends Controller
             'order_id' => 'required|exists:orders,id',
         ]);
 
-        $order = Order::with('user')->findOrFail($request->order_id);
+        $user = $request->user();
+
+        $order = Order::with(['user', 'payment'])->findOrFail($request->order_id);
+
+        if ($order->user_id !== $user->id && $user->role !== 'admin') {
+            return response()->json([
+                'error' => 'Unauthorized payment attempt'
+            ], 403);
+        }
+
+        if ($order->status === 'paid' || $order->status === 'completed') {
+            return response()->json([
+                'error' => 'This order has already been paid'
+            ], 400);
+        }
+
+        if ($order->payment && $order->payment->expires_at && now()->greaterThan($order->payment->expires_at)) {
+            $order->payment->update([
+                'status' => 'expired',
+                'expired_at' => now(),
+            ]);
+
+            $order->update([
+                'status' => 'expired',
+            ]);
+
+            return response()->json([
+                'error' => 'Payment link has expired. Please create a new order.'
+            ], 400);
+        }
 
         $paymentData = [
             'amount' => $order->total_price * 100,
             'email' => $order->user->email,
-            'metadata' => ['order_id' => $order->id],
+            'metadata' => [
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+            ],
         ];
 
         try {
             $authorization = Paystack::getAuthorizationUrl($paymentData);
 
-            // ✅ KEY FIX: detect request type
             if ($request->expectsJson()) {
-                // Postman / frontend
                 return response()->json([
                     'authorization_url' => $authorization->url
                 ]);
             }
 
-            // ✅ Email click → redirect user
             return redirect($authorization->url);
 
         } catch (\Exception $e) {
-            Log::error('Paystack initialize failed', ['message' => $e->getMessage()]);
+            Log::error('Paystack initialize failed', [
+                'message' => $e->getMessage()
+            ]);
 
             return response()->json([
                 'error' => 'Payment initialization failed',
@@ -137,85 +169,160 @@ class PaymentController extends Controller
      */
     public function callback(Request $request)
     {
-        $reference = $request->query('reference')
-            ?? $request->input('reference')
-            ?? data_get($request->all(), 'data.reference');
+        $reference = $request->query('reference');
 
         if (!$reference) {
-            return response()->json(['error' => 'Missing reference'], 400);
+            return response()->json([
+                'error' => 'Payment reference is missing'
+            ], 400);
         }
-
-        $secret = config('services.paystack.secret');
-
-        $response = Http::withToken($secret)
-            ->get("https://api.paystack.co/transaction/verify/{$reference}");
-
-        if ($response->failed()) {
-            return response()->json(['error' => 'Verification failed'], 400);
-        }
-
-        $data = $response->json()['data'];
-
-        $order = Order::with('user')->find($data['metadata']['order_id']);
-
-        if (!$order) {
-            return response()->json(['error' => 'Order not found'], 404);
-        }
-
-        DB::beginTransaction();
 
         try {
+            $paymentDetails = Paystack::getPaymentData();
 
-            $amount = $data['amount'] / 100;
-            $ref = $data['reference'];
+            if (!$paymentDetails || !isset($paymentDetails['data'])) {
+                return response()->json([
+                    'error' => 'Unable to verify payment'
+                ], 400);
+            }
 
-            // 1. update payment
-            $payment = Payment::updateOrCreate(
-                [
-                    'order_id' => $order->id,
-                    'user_id' => $order->user_id,
-                ],
-                [
-                    'amount' => $amount,
-                    'status' => 'paid',
-                    'payment_method' => 'paystack',
-                    'gateway_reference' => $ref,
-                    'paid_at' => now(),
-                ]
-            );
+            $data = $paymentDetails['data'];
 
-            // 2. update order
-            $order->update(['status' => 'completed']);
+            if ($data['status'] !== 'success') {
+                return response()->json([
+                    'error' => 'Payment was not successful'
+                ], 400);
+            }
+
+            $orderId = $data['metadata']['order_id'] ?? null;
+            $userId = $data['metadata']['user_id'] ?? null;
+
+            if (!$orderId || !$userId) {
+                return response()->json([
+                    'error' => 'Invalid payment metadata'
+                ], 400);
+            }
+
+            DB::beginTransaction();
+
+            $order = Order::with(['items.product', 'payment'])
+                ->lockForUpdate()
+                ->findOrFail($orderId);
+
+            if ((int) $order->user_id !== (int) $userId) {
+                DB::rollBack();
+
+                return response()->json([
+                    'error' => 'Payment does not belong to this user'
+                ], 403);
+            }
+
+            $payment = Payment::where('order_id', $order->id)
+                ->where('user_id', $userId)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$payment) {
+                DB::rollBack();
+
+                return response()->json([
+                    'error' => 'Payment record not found'
+                ], 404);
+            }
+
+            if ($payment->status === 'paid') {
+                DB::rollBack();
+
+                return response()->json([
+                    'message' => 'Payment already verified',
+                    'order' => $order,
+                    'payment' => $payment
+                ], 200);
+            }
+
+            if ($payment->status === 'expired' || now()->greaterThan($payment->expires_at)) {
+                $payment->update([
+                    'status' => 'expired',
+                    'expired_at' => now(),
+                ]);
+
+                $order->update([
+                    'status' => 'expired',
+                ]);
+
+                DB::commit();
+
+                return response()->json([
+                    'error' => 'Payment has expired. Please create a new order.'
+                ], 400);
+            }
+
+            $paidAmount = $data['amount'] / 100;
+
+            if ((float) $paidAmount !== (float) $order->total_price) {
+                DB::rollBack();
+
+                return response()->json([
+                    'error' => 'Payment amount does not match order amount'
+                ], 400);
+            }
+
+            foreach ($order->items as $item) {
+                $product = Product::where('id', $item->product_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$product) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'error' => 'Product not found for order item'
+                    ], 404);
+                }
+
+                if ($product->quantity < $item->quantity) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'error' => "Insufficient stock for {$product->name}"
+                    ], 400);
+                }
+
+                $product->decrement('quantity', $item->quantity);
+            }
+
+            $payment->update([
+                'amount' => $paidAmount,
+                'status' => 'paid',
+                'payment_method' => 'paystack',
+                'gateway_reference' => $data['reference'],
+                'paid_at' => now(),
+            ]);
+
+            $order->update([
+                'status' => 'paid',
+            ]);
 
             DB::commit();
 
-            // 3. EMAIL (AFTER COMMIT)
-            try {
-                Mail::send('emails.payment_success', ['order' => $order], function ($message) use ($order) {
-
-                    $to = env('MAIL_MODE') === 'testing'
-                        ? 'ayivorm@gmail.com'
-                        : $order->user->email;
-
-                    $message->to($to);
-                    $message->subject('Payment Successful - GreenHaven');
-                });
-
-            } catch (\Exception $e) {
-                Log::error("EMAIL FAILED: " . $e->getMessage());
-            }
-
             return response()->json([
                 'message' => 'Payment verified successfully',
-                'payment' => $payment
-            ]);
+                'order' => $order->fresh(['items.product', 'payment']),
+                'payment' => $payment->fresh(),
+            ], 200);
 
         } catch (\Exception $e) {
             DB::rollBack();
 
+            Log::error('Paystack callback error', [
+                'message' => $e->getMessage(),
+                'reference' => $reference,
+            ]);
+
             return response()->json([
-                'error' => $e->getMessage()
-            ], 400);
+                'error' => 'Payment verification failed',
+                'message' => $e->getMessage()
+            ], 500);
         }
     }
     /**

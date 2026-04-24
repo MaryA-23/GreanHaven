@@ -4,50 +4,53 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
-use App\Services\InventoryService;
-use App\Models\Payment;
 use Illuminate\Support\Facades\Mail;
-       
+use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
-
-protected $inventoryService;
-    public function __construct(InventoryService $inventoryService)
+    public function __construct()
     {
         $this->middleware('auth:sanctum');
-        $this->inventoryService = $inventoryService;
     }
 
     /**
-     * List all orders (admins see all, users see only theirs).
+     * User: view own orders.
+     * Company: view company orders.
+     * Admin: view all orders.
      */
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $query = Order::with('items.Product'); // eager load items & Products
+        $query = Order::with(['items.product', 'payment', 'user', 'company'])
+            ->latest();
 
-        if ($user->role === 'admin') {
-            // Admin sees all orders
-        } elseif ($user->role === 'company') {
+        if ($user->role === 'company') {
             $query->where('company_id', $user->company_id);
-        } else { // normal user
+        }
+
+        if ($user->role === 'user') {
             $query->where('user_id', $user->id);
         }
 
-        // Optional: filter by date if needed
-        if ($request->date_from) {
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $request->date_from);
         }
-        if ($request->date_to) {
+
+        if ($request->filled('date_to')) {
             $query->whereDate('created_at', '<=', $request->date_to);
         }
 
-        $orders = $query->paginate(10);
+        $orders = $query->paginate($request->get('per_page', 10));
 
         return response()->json([
             'success' => true,
@@ -56,10 +59,19 @@ protected $inventoryService;
     }
 
     /**
-     * Create a new order (user).
+     * User only: create order.
+     * Stock is checked but NOT deducted here.
+     * Stock deduction happens only after successful payment callback.
      */
     public function store(Request $request): JsonResponse
     {
+        if ($request->user()->role !== 'user') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only users can create orders.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
@@ -69,115 +81,149 @@ protected $inventoryService;
         $user = $request->user();
 
         $existingOrder = Order::where('user_id', $user->id)
-            ->where('status', 'pending')
+            ->where('status', 'pending_payment')
+            ->whereHas('payment', function ($query) {
+                $query->where('status', 'pending')
+                    ->where('expires_at', '>', now());
+            })
             ->first();
 
         if ($existingOrder) {
             return response()->json([
-                'message' => 'You already have a pending order'
-            ], 400);
+                'success' => false,
+                'message' => 'You already have a pending unpaid order. Please complete payment or wait for it to expire.',
+                'data' => $existingOrder->load(['items.product', 'payment']),
+            ], 409);
         }
 
         $mergedItems = [];
 
         foreach ($validated['items'] as $item) {
-            $mergedItems[$item['product_id']] =
-                ($mergedItems[$item['product_id']] ?? 0) + $item['quantity'];
+            $productId = $item['product_id'];
+            $quantity = (int) $item['quantity'];
+
+            $mergedItems[$productId] = ($mergedItems[$productId] ?? 0) + $quantity;
         }
 
         DB::beginTransaction();
 
         try {
-
             $total = 0;
 
-            // 1. CREATE ORDER
             $order = Order::create([
                 'user_id' => $user->id,
-                'company_id' => $user->company_id,
-                'status' => 'pending',
+                'company_id' => $user->company_id ?? null,
+                'status' => 'pending_payment',
                 'total_price' => 0,
             ]);
 
-            // 2. CREATE ITEMS + DEDUCT STOCK
             foreach ($mergedItems as $productId => $quantity) {
+                $product = Product::where('id', $productId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-                $product = Product::lockForUpdate()->findOrFail($productId);
-
-                if ($product->status !== 'active') {
-                    throw new \Exception("Product {$product->name} not available");
+                if ($product->status !== 'active' || !$product->is_available) {
+                    throw new \Exception("Product {$product->name} is not available.");
                 }
 
-                $this->inventoryService->deductStock($product, $quantity);
+                if ($product->quantity < $quantity) {
+                    throw new \Exception("Insufficient stock for {$product->name}.");
+                }
 
                 $subtotal = $product->price * $quantity;
 
                 $order->items()->create([
                     'product_id' => $product->id,
-                    'quantity'   => $quantity,
-                    'price'      => $product->price,
-                    'subtotal'   => $subtotal,
+                    'quantity' => $quantity,
+                    'price' => $product->price,
+                    'subtotal' => $subtotal,
                 ]);
 
                 $total += $subtotal;
             }
 
-            // 3. UPDATE ORDER TOTAL
-            $order->update(['total_price' => $total]);
+            $order->update([
+                'total_price' => $total,
+            ]);
 
-            // 4. CREATE PAYMENT
-            Payment::updateOrCreate(
-                [
-                    'order_id' => $order->id,
-                    'user_id'  => $user->id,
-                ],
-                [
-                    'amount' => $total,
-                    'status' => 'pending',
-                    'payment_method' => null,
-                    'gateway_reference' => null,
-                    'paid_at' => null,
-                ]
-            );
+            $payment = Payment::create([
+                'order_id' => $order->id,
+                'user_id' => $user->id,
+                'amount' => $total,
+                'status' => 'pending',
+                'payment_method' => 'paystack',
+                'gateway_reference' => null,
+                'paid_at' => null,
+                'expires_at' => now()->addMinutes(15),
+                'expired_at' => null,
+            ]);
 
             DB::commit();
 
-            // 5. SEND ORDER EMAIL (IMPORTANT FIX)
-          $paymentUrl = url("/payment/initialize?order_id=" . $order->id);
+            $order = $order->fresh(['items.product', 'payment', 'user']);
 
-            Mail::send('emails.payment_pending', [
-                'order' => $order,
-                'paymentUrl' => $paymentUrl
-            ], function ($message) use ($order) {
+            try {
+                $paymentUrl = url("/payment/initialize?order_id=" . $order->id);
 
-                $message->to($order->user->email);
-                $message->subject('Order Received - Pay Now');
-            });
+                Mail::send('emails.payment_pending', [
+                    'order' => $order,
+                    'payment' => $payment,
+                    'paymentUrl' => $paymentUrl,
+                ], function ($message) use ($order) {
+                    $message->to($order->user->email);
+                    $message->subject('Greenhaven Order Payment Details');
+                });
+            } catch (\Exception $e) {
+                Log::error('Payment pending email failed', [
+                    'message' => $e->getMessage(),
+                    'order_id' => $order->id,
+                ]);
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Order created successfully',
-                'data' => $order->load('items.product'),
+                'message' => 'Order created successfully. Payment is pending.',
+                'data' => $order,
             ], 201);
 
         } catch (\Exception $e) {
-
             DB::rollBack();
 
+            Log::error('Order creation failed', [
+                'message' => $e->getMessage(),
+                'user_id' => $user->id,
+            ]);
+
             return response()->json([
-                'error' => $e->getMessage()
+                'success' => false,
+                'message' => 'Order creation failed.',
+                'error' => $e->getMessage(),
             ], 400);
         }
     }
 
     /**
-     * Show a single order.
+     * Show single order depending on role.
      */
     public function show(Request $request, int $id): JsonResponse
     {
-        $order = Order::with('items.Product')->findOrFail($id);
+        $user = $request->user();
 
-        if ($request->user()->role !== 'admin' && $order->user_id !== $request->user()->id) {
-            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        $order = Order::with(['items.product', 'payment', 'user', 'company'])
+            ->findOrFail($id);
+
+        if ($user->role === 'user' && $order->user_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized.',
+            ], 403);
+        }
+
+        if ($user->role === 'company' && $order->company_id !== $user->company_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized.',
+            ], 403);
         }
 
         return response()->json([
@@ -187,45 +233,243 @@ protected $inventoryService;
     }
 
     /**
-     * Update order status (admin only).
+     * User can cancel only unpaid pending orders.
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function cancel(Request $request, int $id): JsonResponse
     {
-        if ($request->user()->role !== 'admin') {
-            return response()->json(['success' => false, 'message' => 'Only admins can update orders.'], 403);
+        $user = $request->user();
+
+        if ($user->role !== 'user') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only users can cancel their own unpaid orders.',
+            ], 403);
         }
 
-        $order = Order::findOrFail($id);
+        DB::beginTransaction();
 
-        $validated = $request->validate([
-            'status' => 'required|string|in:pending,completed,cancelled',
+        try {
+            $order = Order::with('payment')
+                ->where('id', $id)
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (!in_array($order->status, ['pending_payment'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending unpaid orders can be cancelled.',
+                ], 400);
+            }
+
+            if ($order->payment && $order->payment->status === 'paid') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Paid orders cannot be cancelled here.',
+                ], 400);
+            }
+
+            $order->update([
+                'status' => 'cancelled',
+            ]);
+
+            if ($order->payment && $order->payment->status === 'pending') {
+                $order->payment->update([
+                    'status' => 'cancelled',
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order cancelled successfully.',
+                'data' => $order->fresh(['items.product', 'payment']),
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Order cancellation failed.',
+                'error' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Admin: mark paid order as processing.
+     */
+    public function markAsProcessing(Request $request, int $id): JsonResponse
+    {
+        if ($request->user()->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can update fulfilment status.',
+            ], 403);
+        }
+
+        $order = Order::with('payment')->findOrFail($id);
+
+        if ($order->status !== 'paid') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only paid orders can be moved to processing.',
+            ], 400);
+        }
+
+        $order->update([
+            'status' => 'processing',
         ]);
-
-        $order->update($validated);
 
         return response()->json([
             'success' => true,
-            'message' => 'Order updated successfully.',
-            'data' => $order->load('items.product'),
+            'message' => 'Order marked as processing.',
+            'data' => $order->fresh(['items.product', 'payment']),
         ]);
     }
 
     /**
-     * Delete an order (admin only).
+     * Admin: complete processing order.
      */
-    public function destroy(Request $request, int $id): JsonResponse
+    public function markAsCompleted(Request $request, int $id): JsonResponse
     {
         if ($request->user()->role !== 'admin') {
-            return response()->json(['success' => false, 'message' => 'Only admins can delete orders.'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can complete orders.',
+            ], 403);
         }
 
         $order = Order::findOrFail($id);
-        $order->delete();
+
+        if ($order->status !== 'processing') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only processing orders can be completed.',
+            ], 400);
+        }
+
+        $order->update([
+            'status' => 'completed',
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Order deleted successfully.',
+            'message' => 'Order completed successfully.',
+            'data' => $order->fresh(['items.product', 'payment']),
         ]);
     }
-    
+
+    /**
+     * Admin: cancel unpaid/problematic order.
+     */
+    public function adminCancel(Request $request, int $id): JsonResponse
+    {
+        if ($request->user()->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can cancel orders.',
+            ], 403);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            $order = Order::with('payment')
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            if (in_array($order->status, ['paid', 'processing', 'completed'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Paid, processing, or completed orders should not be cancelled from this endpoint.',
+                ], 400);
+            }
+
+            $order->update([
+                'status' => 'cancelled',
+            ]);
+
+            if ($order->payment && $order->payment->status === 'pending') {
+                $order->payment->update([
+                    'status' => 'cancelled',
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order cancelled successfully.',
+                'data' => $order->fresh(['items.product', 'payment']),
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Admin cancellation failed.',
+                'error' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Admin: expire unpaid order manually.
+     */
+    public function adminExpire(Request $request, int $id): JsonResponse
+    {
+        if ($request->user()->role !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only admins can expire orders.',
+            ], 403);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            $order = Order::with('payment')
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            if ($order->status !== 'pending_payment') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending payment orders can be expired.',
+                ], 400);
+            }
+
+            $order->update([
+                'status' => 'expired',
+            ]);
+
+            if ($order->payment && $order->payment->status === 'pending') {
+                $order->payment->update([
+                    'status' => 'expired',
+                    'expired_at' => now(),
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order expired successfully.',
+                'data' => $order->fresh(['items.product', 'payment']),
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Order expiry failed.',
+                'error' => $e->getMessage(),
+            ], 400);
+        }
+    }
 }

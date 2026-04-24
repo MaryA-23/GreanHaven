@@ -16,6 +16,10 @@ class Order extends Model
         'total_price',
     ];
 
+      protected $appends = [
+        'payment_status',
+    ];
+    
     public function company()
     {
         return $this->belongsTo(Company::class);
@@ -30,14 +34,14 @@ class Order extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function payments()
-    {
-       Order::with(['user', 'payments']);
-    }
-
     public function payment()
     {
         return $this->hasOne(Payment::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
     }
 
 
