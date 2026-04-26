@@ -57,17 +57,20 @@ class InventoryService
         $product->save();
     }
 
-    private function syncStatus(Product $product): void
-    {
-        if ($product->quantity <= 0) {
-            $product->status = 'out_of_stock';
-            $product->is_available = false;
-        } elseif ($product->quantity <= 5) {
-            $product->status = 'low_stock';
-            $product->is_available = true;
-        } else {
-            $product->status = 'active';
-            $product->is_available = true;
+        private function syncStatus(Product $product)
+        {
+            $threshold = $product->low_stock_threshold ?? 5;
+
+            if ($product->quantity <= 0) {
+                $product->quantity = 0;
+                $product->status = 'out_of_stock';
+                $product->is_available = false;
+            } elseif ($product->quantity <= $threshold) {
+                $product->status = 'low_stock';
+                $product->is_available = true;
+            } else {
+                $product->status = 'active';
+                $product->is_available = true;
+            }
         }
-    }
 }

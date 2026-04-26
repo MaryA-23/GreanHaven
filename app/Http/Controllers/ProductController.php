@@ -172,6 +172,24 @@ class ProductController extends Controller
 
         $product->update($validated);
 
+        if (array_key_exists('quantity', $validated)) {
+            $threshold = $product->low_stock_threshold ?? 5;
+
+            if ($product->quantity <= 0) {
+                $product->quantity = 0;
+                $product->status = 'out_of_stock';
+                $product->is_available = false;
+            } elseif ($product->quantity <= $threshold) {
+                $product->status = 'low_stock';
+                $product->is_available = true;
+            } else {
+                $product->status = 'active';
+                $product->is_available = true;
+            }
+
+            $product->save();
+        }
+
         Log::info('Product updated', [
             'id' => $product->id,
             'old_status' => $oldStatus,

@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Order;
 use App\Models\Product;
-use App\Http\Resources\PaymentResource;
+use App\Services\InventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
@@ -201,7 +201,7 @@ class PaymentController extends Controller
      * - If there's no reference, it returns a clear error (so we never call Paystack verify with empty string).
      * - It then calls Paystack verify endpoint with the reference and processes the verified response.
      */
-    public function callback(Request $request)
+    public function callback(Request $request, InventoryService $inventoryService)
     {
         $reference = $request->query('reference');
 
@@ -327,9 +327,9 @@ class PaymentController extends Controller
                         'error' => "Insufficient stock for {$product->name}"
                     ], 400);
                 }
+                $inventoryService->deductStock($product, $item->quantity);
 
-                $product->decrement('quantity', $item->quantity);
-            }
+             }
 
             $payment->update([
                 'amount' => $paidAmount,
@@ -344,21 +344,20 @@ class PaymentController extends Controller
             ]);
 
             try {
-            Mail::send('emails.payment_success', [
-                    'order' => $order->fresh(['items.product', 'payment', 'user']),
-                    'payment' => $payment->fresh(),
-                    'user' => $order->user,
-                ], function ($message) use ($order) {
-                    $message->to($order->user->email);
-                    $message->subject('Greenhaven Payment Confirmation');
-                });
+                Mail::to($order->user->email)->send(
+                    new PaymentSuccessMail(
+                        $order->fresh(['items.product', 'payment', 'user']),
+                        $payment->fresh(),
+                        $order->user
+                    )
+                );
             } catch (\Exception $mailException) {
                 Log::error('Payment success email failed', [
                     'message' => $mailException->getMessage(),
                     'order_id' => $order->id,
                 ]);
             }
-            DB::commit();
+             DB::commit();
 
             return response()->json([
                 'message' => 'Payment verified successfully',
