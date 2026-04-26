@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\Api\Admin\DashboardController;
+use Illuminate\Support\Facades\Mail;
 
 
 
@@ -132,4 +133,15 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::post('/categories', [CategoryController::class, 'store']);
+});
+
+Route::get('/test-mail', function () {
+    Mail::raw('Greenhaven Gmail SMTP is working.', function ($message) {
+        $message->to('yourpersonalemail@gmail.com')
+            ->subject('Greenhaven Test Mail');
+    });
+
+    return response()->json([
+        'message' => 'Test mail sent'
+    ]);
 });

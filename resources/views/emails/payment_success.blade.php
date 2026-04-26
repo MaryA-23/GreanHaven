@@ -59,25 +59,31 @@
                 </div>
                 
                 <div class="details-grid">
-                    <div class="detail">
-                        <div class="detail-label">Total Paid</div>
-                        <div class="detail-value price">${{ number_format($order->total_price, 2) }}</div>
-                    </div>
-                    <div class="detail">
-                        <div class="detail-label">Order Date</div>
-                        <div class="detail-value">{{ $order->created_at->format('M d, Y') }}</div>
-                    </div>
+                <div class="detail">
+                    <div class="detail-label">Total Paid</div>
+                    <div class="detail-value price">GHS {{ number_format($order->total_price, 2) }}</div>
                 </div>
-            </div>
+                <div class="detail">
+                    <div class="detail-label">Order Date</div>
+                    <div class="detail-value">{{ $order->created_at->format('M d, Y') }}</div>
+                </div>
+                </div>
 
-            <div style="text-align: center; margin: 30px 0;">
+             {{-- <div style="text-align: center; margin: 30px 0;">
                 <a href="{{ config('app.frontend_url') }}/orders/{{ $order->id }}" class="button">
                     View Order Details
                 </a>
                 <a href="{{ config('app.frontend_url') }}" class="button" style="background: #6c757d;">
                     Continue Shopping
                 </a>
+                </div> --}}
+                <div style="text-align: center; margin: 30px 0;">
+                <a href="{{ url('/') }}" class="button">
+                    Visit GreenHaven
+                </a>
             </div>
+            
+
         </div>
 
         <!-- FOOTER -->

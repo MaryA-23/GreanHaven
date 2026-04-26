@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\DB;  
+use App\Mail\PaymentSuccessMail;
 
 class PaymentController extends Controller
 {
@@ -342,6 +343,21 @@ class PaymentController extends Controller
                 'status' => 'paid',
             ]);
 
+            try {
+            Mail::send('emails.payment_success', [
+                    'order' => $order->fresh(['items.product', 'payment', 'user']),
+                    'payment' => $payment->fresh(),
+                    'user' => $order->user,
+                ], function ($message) use ($order) {
+                    $message->to($order->user->email);
+                    $message->subject('Greenhaven Payment Confirmation');
+                });
+            } catch (\Exception $mailException) {
+                Log::error('Payment success email failed', [
+                    'message' => $mailException->getMessage(),
+                    'order_id' => $order->id,
+                ]);
+            }
             DB::commit();
 
             return response()->json([
