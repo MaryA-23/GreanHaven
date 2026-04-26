@@ -3,62 +3,53 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Models\Order;
-use Carbon\Carbon;
+use App\Models\Payment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CancelUnpaidOrders extends Command
 {
     /**
-     * The name and signature of the console command.
-     *
-     * @var string
+     * Keep the old command signature so your scheduler does not break.
      */
-    protected $signature = 'orders:cancel-unpaid {--hours=0.5 : Hours before cancel}';
+    protected $signature = 'orders:cancel-unpaid';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    protected $description = 'Cancel unpaid pending orders and restore stock';
+    protected $description = 'Expire unpaid pending payment orders';
 
-    /**
-     * Execute the console command.
-     */
     public function handle()
     {
-        $hours = $this->option('hours');
-        $cutoff = Carbon::now()->subHours($hours);
-
-        $orders = Order::where('status', 'pending')
-            ->where('created_at', '<=', $cutoff)
-            ->with('items.product')
+        $payments = Payment::with('order')
+            ->where('status', 'pending')
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<=', now())
             ->get();
 
-        if ($orders->isEmpty()) {
-            $this->info('No unpaid orders to cancel.');
-            return;
+        if ($payments->isEmpty()) {
+            $this->info('No pending payments to expire.');
+            return Command::SUCCESS;
         }
 
-        DB::transaction(function () use ($orders) {
-            foreach ($orders as $order) {
-                // Restore stock
-                foreach ($order->items as $item) {
-                    $item->product?->increment('quantity', $item->quantity);
-                }
+        DB::transaction(function () use ($payments) {
+            foreach ($payments as $payment) {
+                $payment->update([
+                    'status' => 'expired',
+                    'expired_at' => now(),
+                ]);
 
-                // Cancel order
-                $order->update(['status' => 'cancelled']);
+                if ($payment->order && $payment->order->status === 'pending_payment') {
+                    $payment->order->update([
+                        'status' => 'expired',
+                    ]);
+                }
             }
         });
 
-        Log::info('Unpaid orders cancelled', [
-            'count' => $orders->count(),
-            'hours' => $hours
+        Log::info('Pending payments expired', [
+            'count' => $payments->count(),
         ]);
 
-        $this->info("✅ Cancelled {$orders->count()} unpaid orders (>{$hours}h old). Stock restored.");
+        $this->info("Expired {$payments->count()} pending payment(s).");
+
+        return Command::SUCCESS;
     }
 }

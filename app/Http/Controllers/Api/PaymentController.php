@@ -145,17 +145,6 @@ class PaymentController extends Controller
             'gateway_reference' => $reference,
             'paid_at'           => now(),
         ]);
-
-        // Update order
-       if ($order->status !== 'confirmed') {
-        $order->update(['status' => 'confirmed']);
-
-        foreach ($order->items as $item) {
-            $item->product->decrement('quantity', $item->quantity);
-        }
-        }
-
-    
         return $payment;
     }
 
@@ -240,7 +229,10 @@ class PaymentController extends Controller
                 ], 200);
             }
 
-            if ($payment->status === 'expired' || now()->greaterThan($payment->expires_at)) {
+            if (
+                $payment->status === 'expired' ||
+                ($payment->expires_at && now()->greaterThan($payment->expires_at))
+            ) {
                 $payment->update([
                     'status' => 'expired',
                     'expired_at' => now(),
