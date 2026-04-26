@@ -344,7 +344,8 @@ class PaymentController extends Controller
             ]);
 
             try {
-                Mail::to($order->user->email)->send(
+                // Mail::to($order->user->email)->send(
+                Mail::to('ayivorm@gmail.com')->send(
                     new PaymentSuccessMail(
                         $order->fresh(['items.product', 'payment', 'user']),
                         $payment->fresh(),
