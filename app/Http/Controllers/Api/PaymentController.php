@@ -65,22 +65,45 @@ class PaymentController extends Controller
 
         $user = $request->user();
 
-        $order = Order::with(['user', 'payment'])->findOrFail($request->order_id);
+        $order = Order::with(['user', 'payment'])
+            ->where('id', $request->order_id)
+            ->firstOrFail();
 
-        if ($order->user_id !== $user->id && $user->role !== 'admin') {
+        if ((int) $order->user_id !== (int) $user->id) {
             return response()->json([
-                'error' => 'Unauthorized payment attempt'
+                'success' => false,
+                'message' => 'Unauthorized payment attempt.'
             ], 403);
         }
 
-        if ($order->status === 'paid' || $order->status === 'completed') {
+        if ($order->status !== 'pending_payment') {
             return response()->json([
-                'error' => 'This order has already been paid'
+                'success' => false,
+                'message' => 'Only pending payment orders can be paid.'
             ], 400);
         }
 
-        if ($order->payment && $order->payment->expires_at && now()->greaterThan($order->payment->expires_at)) {
-            $order->payment->update([
+        $payment = $order->payment;
+
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment record not found for this order.'
+            ], 404);
+        }
+
+        if ($payment->status === 'paid') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This order has already been paid.'
+            ], 400);
+        }
+
+        if (
+            $payment->status === 'expired' ||
+            ($payment->expires_at && now()->greaterThan($payment->expires_at))
+        ) {
+            $payment->update([
                 'status' => 'expired',
                 'expired_at' => now(),
             ]);
@@ -90,7 +113,8 @@ class PaymentController extends Controller
             ]);
 
             return response()->json([
-                'error' => 'Payment link has expired. Please create a new order.'
+                'success' => false,
+                'message' => 'Payment link has expired. Please create a new order.'
             ], 400);
         }
 
@@ -101,27 +125,47 @@ class PaymentController extends Controller
                 'order_id' => $order->id,
                 'user_id' => $order->user_id,
             ],
+            'callback_url' => url('/api/payments/paystack/callback'),
         ];
 
         try {
             $authorization = Paystack::getAuthorizationUrl($paymentData);
 
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'authorization_url' => $authorization->url
+            $paymentUrl = $authorization->url;
+
+            try {
+                Mail::send('emails.payment_pending', [
+                    'order' => $order,
+                    'payment' => $payment,
+                    'paymentUrl' => $paymentUrl,
+                ], function ($message) use ($order) {
+                    $message->to($order->user->email);
+                    $message->subject('Greenhaven Order Payment Details');
+                });
+            } catch (\Exception $mailException) {
+                Log::error('Payment email failed', [
+                    'message' => $mailException->getMessage(),
+                    'order_id' => $order->id,
                 ]);
             }
 
-            return redirect($authorization->url);
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment link generated. If email is configured correctly, it has been sent to your mail.',
+                'authorization_url' => $paymentUrl,
+                'payment_expires_at' => $payment->expires_at,
+            ], 200);
 
         } catch (\Exception $e) {
             Log::error('Paystack initialize failed', [
-                'message' => $e->getMessage()
+                'message' => $e->getMessage(),
+                'order_id' => $order->id,
             ]);
 
             return response()->json([
-                'error' => 'Payment initialization failed',
-                'message' => $e->getMessage()
+                'success' => false,
+                'message' => 'Payment initialization failed.',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

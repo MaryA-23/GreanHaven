@@ -88,7 +88,6 @@ Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
 
 
 
-// Payments routes
 Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
     // Normal users: only their payments
     Route::middleware('role:user')->get('/my', [PaymentController::class, 'index']);
@@ -96,16 +95,18 @@ Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
     Route::middleware('role:company')->get('/company', [PaymentController::class, 'index']);
     // Admin: all payments
     Route::middleware('role:admin')->get('/', [PaymentController::class, 'index']);
-    // Common authenticated actions
-    Route::post('/', [PaymentController::class, 'store']);        // Create manual payment
-    Route::get('/{payment}', [PaymentController::class, 'show']); // View single payment
-    Route::patch('/{payment}', [PaymentController::class, 'update']); // Update payment
-    Route::delete('/{payment}', [PaymentController::class, 'destroy']); // Delete payment
-    // Initialize Paystack payment (authenticated)
+    // Manual payment routes - I recommend admin only
+    Route::middleware('role:admin')->group(function () {
+        Route::post('/manual', [PaymentController::class, 'store']);
+        Route::patch('/{payment}', [PaymentController::class, 'update']);
+        Route::delete('/{payment}', [PaymentController::class, 'destroy']);
+    });
+    // Common authenticated view
+    Route::get('/{payment}', [PaymentController::class, 'show']);
+    // Initialize Paystack payment
     Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
-    Route::get('/payments/paystack/initialize', [PaymentController::class, 'initialize']);
 });
-// Public callback from Paystack (no auth)
+// Public callback from Paystack - no auth
 Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback']);
 
 

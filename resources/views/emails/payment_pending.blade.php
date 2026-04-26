@@ -1,29 +1,26 @@
 <!DOCTYPE html>
-<html lang='en'>
+<html>
 <head>
-    <meta charset='utf-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1'>
-    <title>Payment Pending</title>
+    <meta charset="UTF-8">
+    <title>Greenhaven Order Payment Details</title>
 </head>
 <body>
+    <p>Hello {{ $order->user->name ?? 'Customer' }},</p>
 
-    <h2>Order Received 🛒</h2>
+    <p>Thank you for placing an order with Greenhaven.</p>
 
-    <p>Your order #{{ $order->id }} has been created successfully.</p>
+    <p><strong>Order Number:</strong> #{{ $order->id }}</p>
+    <p><strong>Amount Due:</strong> GHS {{ number_format($order->total_price, 2) }}</p>
+    <p><strong>Payment Expiry:</strong> {{ optional($payment->expires_at)->format('d M Y, h:i A') }}</p>
 
-    <p>Total Amount: {{ $order->total_price }}</p>
+    <p>Please click below to complete your payment securely:</p>
 
-    <p>Status: Pending Payment</p>
+    <p>
+        <a href="{{ $paymentUrl }}">Complete Payment</a>
+    </p>
 
-    <p>Click below to complete payment:</p>
+    <p>If payment is not completed before the expiry time, the order will automatically expire.</p>
 
-    <a href="{{ url('/api/payments/paystack/initialize?order_id=' . $order->id) }}">
-    Pay Now
-</a>
-
-    <p>If you have any questions, please contact our support team.</p>
-
-    <p>Thank you for shopping with us!</p>
-
+    <p>Thank you,<br>Greenhaven Team</p>
 </body>
 </html>
