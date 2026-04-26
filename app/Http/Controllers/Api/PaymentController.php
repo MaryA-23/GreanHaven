@@ -211,15 +211,18 @@ class PaymentController extends Controller
         }
 
         try {
-            $paymentDetails = Paystack::getPaymentData();
+            $paymentDetails = Http::withToken(env('PAYSTACK_SECRET_KEY'))
+            ->get("https://api.paystack.co/transaction/verify/{$reference}")
+            ->json();
 
-            if (!$paymentDetails || !isset($paymentDetails['data'])) {
-                return response()->json([
-                    'error' => 'Unable to verify payment'
-                ], 400);
-            }
+             if (!$paymentDetails || ($paymentDetails['status'] ?? false) !== true || !isset($paymentDetails['data'])) {
+                    return response()->json([
+                        'error' => 'Unable to verify payment',
+                        'details' => $paymentDetails,
+                    ], 400);
+                }
 
-            $data = $paymentDetails['data'];
+               $data = $paymentDetails['data'];
 
             if ($data['status'] !== 'success') {
                 return response()->json([
