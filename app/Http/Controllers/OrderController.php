@@ -160,24 +160,6 @@ class OrderController extends Controller
 
             $order = $order->fresh(['items.product', 'payment', 'user']);
 
-            try {
-                $paymentUrl = url("/payment/initialize?order_id=" . $order->id);
-
-                Mail::send('emails.payment_pending', [
-                    'order' => $order,
-                    'payment' => $payment,
-                    'paymentUrl' => $paymentUrl,
-                ], function ($message) use ($order) {
-                    $message->to($order->user->email);
-                    $message->subject('Greenhaven Order Payment Details');
-                });
-            } catch (\Exception $e) {
-                Log::error('Payment pending email failed', [
-                    'message' => $e->getMessage(),
-                    'order_id' => $order->id,
-                ]);
-            }
-
             return response()->json([
                 'success' => true,
                 'message' => 'Order created successfully. Payment is pending.',
