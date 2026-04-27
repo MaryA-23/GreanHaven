@@ -133,7 +133,12 @@ class PaymentController extends Controller
             $authorization = Paystack::getAuthorizationUrl($paymentData);
 
             $paymentUrl = $authorization->url;
-
+            
+            Log::info('Payment URL sent to email', [
+                'payment_url' => $paymentUrl,
+                'order_id' => $order->id,
+                'user_email' => $order->user->email,
+            ]);
             try {
                 Mail::send('emails.payment_pending', [
                     'order' => $order,
