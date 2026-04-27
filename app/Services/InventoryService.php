@@ -59,7 +59,7 @@ class InventoryService
         $product->save();
     }
 
-        private function syncStatus(Product $product)
+        public  function syncStatus(Product $product) : void
         {
             $threshold = $product->low_stock_threshold ?? 5;
 
