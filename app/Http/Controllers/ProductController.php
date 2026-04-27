@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use App\Http\Resources\ProductResource;
 use App\Events\ProductReady;
 use Illuminate\Support\Facades\Log;
+use App\Services\InventoryService;
 
 class ProductController extends Controller
 {
@@ -145,7 +146,7 @@ class ProductController extends Controller
     /**
      * Update Product details (Admin only).
      */
-     public function update(Request $request, int $id): JsonResponse
+     public function update(Request $request, int $id, InventoryService $inventoryService): JsonResponse
     {
         if ($request->user()->role !== 'admin') {
             return response()->json([
@@ -170,26 +171,15 @@ class ProductController extends Controller
 
         $oldStatus = $product->status;
 
-        $product->update($validated);
+             $product->update($validated);
 
-        if (array_key_exists('quantity', $validated)) {
-            $threshold = $product->low_stock_threshold ?? 5;
-
-            if ($product->quantity <= 0) {
-                $product->quantity = 0;
-                $product->status = 'out_of_stock';
-                $product->is_available = false;
-            } elseif ($product->quantity <= $threshold) {
-                $product->status = 'low_stock';
-                $product->is_available = true;
-            } else {
-                $product->status = 'active';
-                $product->is_available = true;
+            if (
+                array_key_exists('quantity', $validated) ||
+                array_key_exists('low_stock_threshold', $validated)
+            ) {
+                $inventoryService->syncStatus($product);
+                $product->save();
             }
-
-            $product->save();
-        }
-
         Log::info('Product updated', [
             'id' => $product->id,
             'old_status' => $oldStatus,

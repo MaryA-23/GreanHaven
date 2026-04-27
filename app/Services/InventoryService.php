@@ -13,15 +13,17 @@ class InventoryService
      */
     public function checkStock(Product $product, int $quantity): void
     {
-        if ($product->quantity < $quantity) {
+        $this->syncStatus($product);
+
+        if ($product->status === 'inactive' || $product->status === 'out_of_stock' || !$product->is_available) {
             throw ValidationException::withMessages([
-                'stock' => "{$product->name} has insufficient stock."
+                'stock' => "{$product->name} is not available."
             ]);
         }
 
-        if ($product->status !== 'active' || !$product->is_available) {
+        if ($product->quantity < $quantity) {
             throw ValidationException::withMessages([
-                'stock' => "{$product->name} is not available."
+                'stock' => "{$product->name} has insufficient stock. Available: {$product->quantity}, requested: {$quantity}."
             ]);
         }
     }

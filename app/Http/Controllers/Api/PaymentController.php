@@ -133,7 +133,7 @@ class PaymentController extends Controller
             $authorization = Paystack::getAuthorizationUrl($paymentData);
 
             $paymentUrl = $authorization->url;
-            
+
             Log::info('Payment URL sent to email', [
                 'payment_url' => $paymentUrl,
                 'order_id' => $order->id,
@@ -312,29 +312,21 @@ class PaymentController extends Controller
                 ], 400);
             }
 
-            foreach ($order->items as $item) {
-                $product = Product::where('id', $item->product_id)
-                    ->lockForUpdate()
-                    ->first();
+           foreach ($order->items as $item) {
+            $product = Product::where('id', $item->product_id)
+                ->lockForUpdate()
+                ->first();
 
-                if (!$product) {
-                    DB::rollBack();
+            if (!$product) {
+                DB::rollBack();
 
-                    return response()->json([
-                        'error' => 'Product not found for order item'
-                    ], 404);
-                }
+                return response()->json([
+                    'error' => 'Product not found for order item'
+                ], 404);
+            }
 
-                if ($product->quantity < $item->quantity) {
-                    DB::rollBack();
-
-                    return response()->json([
-                        'error' => "Insufficient stock for {$product->name}"
-                    ], 400);
-                }
-                $inventoryService->deductStock($product, $item->quantity);
-
-             }
+            $inventoryService->deductStock($product, $item->quantity);
+        }
 
             $payment->update([
                 'amount' => $paidAmount,

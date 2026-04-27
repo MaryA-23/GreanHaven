@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use App\Services\InventoryService;
 
 class OrderController extends Controller
 {
@@ -63,7 +64,7 @@ class OrderController extends Controller
      * Stock is checked but NOT deducted here.
      * Stock deduction happens only after successful payment callback.
      */
-    public function store(Request $request): JsonResponse
+   public function store(Request $request, InventoryService $inventoryService): JsonResponse
     {
         if ($request->user()->role !== 'user') {
             return response()->json([
@@ -118,25 +119,22 @@ class OrderController extends Controller
             ]);
 
             foreach ($mergedItems as $productId => $quantity) {
-                $product = Product::where('id', $productId)
-                    ->lockForUpdate()
-                    ->firstOrFail();
+            $product = Product::where('id', $productId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-                if ($product->status !== 'active' || !$product->is_available) {
-                    throw new \Exception("Product {$product->name} is not available.");
-                }
+            $inventoryService->syncStatus($product);
+            $product->save();
 
-                if ($product->quantity < $quantity) {
-                    throw new \Exception("Insufficient stock for {$product->name}.");
-                }
+            $inventoryService->checkStock($product, $quantity);
 
-                $subtotal = $product->price * $quantity;
+            $subtotal = $product->price * $quantity;
 
-                $order->items()->create([
-                    'product_id' => $product->id,
-                    'quantity' => $quantity,
-                    'price' => $product->price,
-                    'subtotal' => $subtotal,
+            $order->items()->create([
+                'product_id' => $product->id,
+                'quantity' => $quantity,
+                'price' => $product->price,
+                'subtotal' => $subtotal,
                 ]);
 
                 $total += $subtotal;
