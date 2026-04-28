@@ -40,7 +40,7 @@ class ProductController extends Controller
         // Filter by price range
         if ($request->filled('min_price')) {
           $query->where('price', '>=', $request->min_price);  
-}
+        }
         if ($request->filled('max_price')) {
             $query->where('price', '<=', $request->max_price);  
         }
@@ -49,7 +49,7 @@ class ProductController extends Controller
         if ($request->filled('in_stock')) {
          $query->where('status', 'active')  
           ->where('quantity', '>', 0);    
-}
+        }
         // Include soft deleted if requested
         if ($request->boolean('with_trashed')) {
             $query->withTrashed();
@@ -72,11 +72,14 @@ class ProductController extends Controller
     /**
      * Add a new Product (Admin only).
      */
-    public function store(Request $request): JsonResponse
+   public function store(Request $request, InventoryService $inventoryService): JsonResponse
     {
         if ($request->user()->role !== 'admin') {
-        return response()->json(['error' => 'Admin only'], 403);
-    }
+            return response()->json([
+                'success' => false,
+                'message' => 'Admin only'
+            ], 403);
+        }
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -86,42 +89,58 @@ class ProductController extends Controller
             'description' => 'nullable|string',
             'unit' => 'required|string|max:50',
             'is_available' => 'nullable|boolean',
-            'status' => 'sometimes|in:active,inactive,out_of_stock',
+            'status' => 'sometimes|in:active,inactive,low_stock,out_of_stock',
+            'low_stock_threshold' => 'nullable|integer|min:0',
         ]);
 
-        //  CHECK IF PRODUCT ALREADY EXISTS
+        // CHECK IF PRODUCT ALREADY EXISTS
         $existingProduct = Product::where('name', $validated['name'])
             ->where('category_id', $validated['category_id'])
             ->first();
 
         if ($existingProduct) {
-
-            // update stock instead of duplicate
+            // Update existing stock instead of creating duplicate
             $existingProduct->quantity += $validated['quantity'];
-            $existingProduct->price = $validated['price']; // optional update
-            $existingProduct->is_available = true;
+            $existingProduct->price = $validated['price'];
+            $existingProduct->description = $validated['description'] ?? $existingProduct->description;
+            $existingProduct->unit = $validated['unit'] ?? $existingProduct->unit;
+
+            if (array_key_exists('low_stock_threshold', $validated)) {
+                $existingProduct->low_stock_threshold = $validated['low_stock_threshold'];
+            }
+
+            // Sync status based on new quantity
+            $inventoryService->syncStatus($existingProduct);
             $existingProduct->save();
 
             return response()->json([
                 'success' => true,
                 'message' => "{$existingProduct->name} stock updated successfully.",
-                'data' => new ProductResource($existingProduct),
+                'data' => new ProductResource($existingProduct->fresh('category')),
             ], 200);
         }
 
-        // create new product
-         $status = $validated['quantity'] > 0 ? 'active' : 'out_of_stock';
-     
+        // Create new product
         $product = Product::create([
-            ...$validated,
-            'status' => $status,
+            'name' => $validated['name'],
+            'price' => $validated['price'],
+            'quantity' => $validated['quantity'],
+            'category_id' => $validated['category_id'],
+            'description' => $validated['description'] ?? null,
+            'unit' => $validated['unit'],
             'is_available' => $validated['is_available'] ?? true,
+            'status' => $validated['status'] ?? 'active',
+            'low_stock_threshold' => $validated['low_stock_threshold'] ?? 5,
         ]);
+
+        // Override status correctly based on quantity
+        $inventoryService->syncStatus($product);
+        $product->save();
 
         return response()->json([
             'success' => true,
             'message' => "{$product->name} has been added.",
-            'data' => new ProductResource($product),
+            'data' => new ProductResource($product->fresh('category')),
         ], 201);
     }
 

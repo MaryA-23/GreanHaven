@@ -86,28 +86,22 @@ Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
 });
 
 
-
 Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
-    // Normal users: only their payments
     Route::middleware('role:user')->get('/my', [PaymentController::class, 'index']);
-    // Company: payments related to their company orders
     Route::middleware('role:company')->get('/company', [PaymentController::class, 'index']);
-    // Admin: all payments
     Route::middleware('role:admin')->get('/', [PaymentController::class, 'index']);
-    // Manual payment routes - I recommend admin only
+
+    Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
+    Route::get('/{payment}', [PaymentController::class, 'show']);
+
     Route::middleware('role:admin')->group(function () {
         Route::post('/manual', [PaymentController::class, 'store']);
         Route::patch('/{payment}', [PaymentController::class, 'update']);
         Route::delete('/{payment}', [PaymentController::class, 'destroy']);
     });
-    // Common authenticated view
-    Route::get('/{payment}', [PaymentController::class, 'show']);
-    // Initialize Paystack payment
-    Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
 });
-// Public callback from Paystack - no auth
 Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback']);
-
+Route::post('/payments/paystack/webhook', [PaymentController::class, 'webhook']);
 
 
 // Reports routes
