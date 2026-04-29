@@ -8,9 +8,11 @@ use App\Models\Payment;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use App\Services\InventoryService;
+use App\Mail\OrderCreatedMail;
+use Illuminate\Support\Facades\Mail;
+
 
 class OrderController extends Controller
 {
@@ -157,6 +159,26 @@ class OrderController extends Controller
             ]);
 
             DB::commit();
+
+        try {
+            Mail::to($order->user->email)->send(
+                new OrderCreatedMail(
+                    $order->fresh(['items.product', 'payment', 'user']),
+                    $order->user
+                )
+            );
+        } catch (\Exception $mailException) {
+            Log::error('Order confirmation email failed', [
+                'message' => $mailException->getMessage(),
+                'order_id' => $order->id,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order created successfully. Payment is pending.',
+            'data' => $order->fresh(['items.product', 'payment']),
+        ], 201);
 
             $order = $order->fresh(['items.product', 'payment', 'user']);
 
