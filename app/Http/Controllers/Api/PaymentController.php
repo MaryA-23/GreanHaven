@@ -160,6 +160,7 @@ class PaymentController extends Controller
                 'message' => 'Payment link generated. If email is configured correctly, it has been sent to your mail.',
                 'authorization_url' => $paymentUrl,
                 'payment_expires_at' => $payment->expires_at,
+                 'callback_url' => url('/api/payments/paystack/callback'),
             ], 200);
 
         } catch (\Exception $e) {
