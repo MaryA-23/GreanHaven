@@ -126,7 +126,8 @@ class PaymentController extends Controller
                 'order_id' => $order->id,
                 'user_id' => $order->user_id,
             ],
-            'callback_url' => url('/api/payments/paystack/callback'),
+            // 'callback_url' => url('/api/payments/paystack/callback'),
+            'callback_url' => env('PAYSTACK_CALLBACK_URL'),
         ];
 
         try {
