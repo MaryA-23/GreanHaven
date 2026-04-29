@@ -119,27 +119,28 @@ class PaymentController extends Controller
             ], 400);
         }
 
-        $paymentData = [
-            'amount' => $order->total_price * 100,
-            'email' => $order->user->email,
-            'metadata' => [
-                'order_id' => $order->id,
-                'user_id' => $order->user_id,
-            ],
-            // 'callback_url' => url('/api/payments/paystack/callback'),
-            'callback_url' => env('PAYSTACK_CALLBACK_URL'),
-        ];
+         $callbackUrl = config('services.paystack.callback_url');
 
+            $paymentData = [
+                'amount' => (int) round($order->total_price * 100),
+                'email' => $order->user->email,
+                'metadata' => [
+                    'order_id' => $order->id,
+                    'user_id' => $order->user_id,
+                ],
+                'callback_url' => $callbackUrl,
+            ];
         try {
             $authorization = Paystack::getAuthorizationUrl($paymentData);
 
             $paymentUrl = $authorization->url;
 
-            Log::info('Payment URL sent to email', [
-                'payment_url' => $paymentUrl,
-                'order_id' => $order->id,
-                'user_email' => $order->user->email,
-            ]);
+            Log::info('Paystack init payload', [
+            'order_id' => $order->id,
+            'callback_url' => $callbackUrl,
+            'payment_url' => $paymentUrl,
+            'user_email' => $order->user->email,
+        ]);
             try {
                 Mail::send('emails.payment_pending', [
                     'order' => $order,
@@ -161,12 +162,14 @@ class PaymentController extends Controller
                 'message' => 'Payment link generated. If email is configured correctly, it has been sent to your mail.',
                 'authorization_url' => $paymentUrl,
                 'payment_expires_at' => $payment->expires_at,
+                'callback_url' => $callbackUrl,
             ], 200);
 
         } catch (\Exception $e) {
             Log::error('Paystack initialize failed', [
                 'message' => $e->getMessage(),
                 'order_id' => $order->id,
+                'callback_url' => $callbackUrl,
             ]);
 
             return response()->json([
