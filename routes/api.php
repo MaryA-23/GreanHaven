@@ -100,10 +100,10 @@ Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
         Route::delete('/{payment}', [PaymentController::class, 'destroy']);
     });
 });
-
 Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback'])
     ->name('payments.paystack.callback');
-Route::post('/payments/paystack/webhook', [PaymentController::class, 'webhook']);
+Route::post('/payments/paystack/webhook', [PaymentController::class, 'webhook'])
+    ->name('payments.paystack.webhook');
 
 // Reports routes
 Route::prefix('reports')->middleware('auth:sanctum')->group(function () {

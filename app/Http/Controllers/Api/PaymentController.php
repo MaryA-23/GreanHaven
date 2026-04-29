@@ -179,7 +179,7 @@ class PaymentController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
-    }   
+    }  
    /**
      * Record a new payment.
      */
