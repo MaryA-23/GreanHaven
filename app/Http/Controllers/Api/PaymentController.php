@@ -119,28 +119,29 @@ class PaymentController extends Controller
             ], 400);
         }
 
-         $callbackUrl = config('services.paystack.callback_url');
+        $callbackUrl = config('services.paystack.callback_url');
 
-            $paymentData = [
-                'amount' => (int) round($order->total_price * 100),
-                'email' => $order->user->email,
-                'metadata' => [
-                    'order_id' => $order->id,
-                    'user_id' => $order->user_id,
-                ],
-                'callback_url' => $callbackUrl,
-            ];
+        $paymentData = [
+            'amount' => (int) round($order->total_price * 100),
+            'email' => $order->user->email,
+            'metadata' => [
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+            ],
+            'callback_url' => $callbackUrl,
+        ];
+
         try {
             $authorization = Paystack::getAuthorizationUrl($paymentData);
-
             $paymentUrl = $authorization->url;
 
             Log::info('Paystack init payload', [
-            'order_id' => $order->id,
-            'callback_url' => $callbackUrl,
-            'payment_url' => $paymentUrl,
-            'user_email' => $order->user->email,
-        ]);
+                'order_id' => $order->id,
+                'callback_url' => $callbackUrl,
+                'payment_url' => $paymentUrl,
+                'user_email' => $order->user->email,
+            ]);
+
             try {
                 Mail::send('emails.payment_pending', [
                     'order' => $order,
@@ -159,7 +160,7 @@ class PaymentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Payment link generated. If email is configured correctly, it has been sent to your mail.',
+                'message' => 'Payment link generated.',
                 'authorization_url' => $paymentUrl,
                 'payment_expires_at' => $payment->expires_at,
                 'callback_url' => $callbackUrl,
@@ -178,8 +179,8 @@ class PaymentController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
-    }
-    /**
+    }   
+   /**
      * Record a new payment.
      */
     private function recordPayment(Order $order, float $amount, string $reference, string $method = 'Paystack')
