@@ -544,70 +544,41 @@ class PaymentController extends Controller
         * creating payment for webbook.
         */      
 
-    public function webhook(Request $request)
+    public function webhook(Request $request, InventoryService $inventoryService)
     {
+        $secret = env('PAYSTACK_SECRET_KEY');
         $signature = $request->header('x-paystack-signature');
         $payload = $request->getContent();
 
-        $expectedSignature = hash_hmac('sha512', $payload, env('PAYSTACK_SECRET_KEY'));
-
-        if (!$signature || !hash_equals($expectedSignature, $signature)) {
-            return response()->json([
-                'error' => 'Invalid webhook signature'
-            ], 403);
+        if (!$signature || hash_hmac('sha512', $payload, $secret) !== $signature) {
+            return response()->json(['message' => 'Invalid signature'], 400);
         }
 
         $event = json_decode($payload, true);
 
-        if (!$event || !isset($event['event'])) {
-            return response()->json([
-                'error' => 'Invalid webhook payload'
-            ], 400);
+        if (($event['event'] ?? null) !== 'charge.success') {
+            return response()->json(['message' => 'Event ignored'], 200);
         }
 
-        if ($event['event'] !== 'charge.success') {
-            return response()->json([
-                'message' => 'Event ignored'
-            ], 200);
+        $data = $event['data'] ?? null;
+
+        if (!$data || ($data['status'] ?? null) !== 'success') {
+            return response()->json(['message' => 'Invalid payment data'], 400);
         }
 
-        $reference = $event['data']['reference'] ?? null;
+        $orderId = $data['metadata']['order_id'] ?? null;
+        $userId = $data['metadata']['user_id'] ?? null;
+        $reference = $data['reference'] ?? null;
+        $paidAmount = isset($data['amount']) ? $data['amount'] / 100 : null;
 
-        if (!$reference) {
-            return response()->json([
-                'error' => 'Missing payment reference'
-            ], 400);
+        if (!$orderId || !$userId || !$reference || !$paidAmount) {
+            return response()->json(['message' => 'Incomplete metadata'], 400);
         }
+
+        DB::beginTransaction();
 
         try {
-            $paymentDetails = Http::withToken(env('PAYSTACK_SECRET_KEY'))
-                ->get("https://api.paystack.co/transaction/verify/{$reference}")
-                ->json();
-
-            if (
-                !$paymentDetails ||
-                ($paymentDetails['status'] ?? false) !== true ||
-                !isset($paymentDetails['data'])
-            ) {
-                return response()->json([
-                    'error' => 'Unable to verify webhook payment'
-                ], 400);
-            }
-
-            $data = $paymentDetails['data'];
-
-            $orderId = $data['metadata']['order_id'] ?? null;
-            $userId = $data['metadata']['user_id'] ?? null;
-
-            if (!$orderId || !$userId) {
-                return response()->json([
-                    'error' => 'Invalid metadata'
-                ], 400);
-            }
-
-            DB::beginTransaction();
-
-            $order = Order::with(['items.product', 'payment'])
+            $order = Order::with(['items.product', 'payment', 'user'])
                 ->lockForUpdate()
                 ->findOrFail($orderId);
 
@@ -618,18 +589,12 @@ class PaymentController extends Controller
 
             if (!$payment) {
                 DB::rollBack();
-
-                return response()->json([
-                    'error' => 'Payment record not found'
-                ], 404);
+                return response()->json(['message' => 'Payment record not found'], 404);
             }
 
             if ($payment->status === 'paid') {
                 DB::rollBack();
-
-                return response()->json([
-                    'message' => 'Payment already processed'
-                ], 200);
+                return response()->json(['message' => 'Already processed'], 200);
             }
 
             if (
@@ -647,22 +612,13 @@ class PaymentController extends Controller
 
                 DB::commit();
 
-                return response()->json([
-                    'message' => 'Expired payment ignored'
-                ], 200);
+                return response()->json(['message' => 'Payment expired'], 200);
             }
-
-            $paidAmount = $data['amount'] / 100;
 
             if ((float) $paidAmount !== (float) $order->total_price) {
                 DB::rollBack();
-
-                return response()->json([
-                    'error' => 'Amount mismatch'
-                ], 400);
+                return response()->json(['message' => 'Amount mismatch'], 400);
             }
-
-            $inventoryService = app(InventoryService::class);
 
             foreach ($order->items as $item) {
                 $product = Product::where('id', $item->product_id)
@@ -671,10 +627,7 @@ class PaymentController extends Controller
 
                 if (!$product) {
                     DB::rollBack();
-
-                    return response()->json([
-                        'error' => 'Product not found'
-                    ], 404);
+                    return response()->json(['message' => 'Product not found'], 404);
                 }
 
                 $inventoryService->deductStock($product, $item->quantity);
@@ -684,7 +637,7 @@ class PaymentController extends Controller
                 'amount' => $paidAmount,
                 'status' => 'paid',
                 'payment_method' => 'paystack',
-                'gateway_reference' => $data['reference'],
+                'gateway_reference' => $reference,
                 'paid_at' => now(),
             ]);
 
@@ -703,25 +656,24 @@ class PaymentController extends Controller
                     )
                 );
             } catch (\Exception $mailException) {
-                Log::error('Payment success email failed via webhook', [
+                Log::error('Payment success email failed', [
                     'message' => $mailException->getMessage(),
                     'order_id' => $order->id,
                 ]);
             }
 
-            return response()->json([
-                'message' => 'Webhook processed successfully'
-            ], 200);
+            return response()->json(['message' => 'Webhook processed successfully'], 200);
 
         } catch (\Exception $e) {
+            DB::rollBack();
+
             Log::error('Paystack webhook error', [
                 'message' => $e->getMessage(),
-                'payload' => $event,
             ]);
 
             return response()->json([
-                'error' => 'Webhook processing failed',
-                'message' => $e->getMessage()
+                'message' => 'Webhook failed',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

@@ -101,9 +101,9 @@ Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
     });
 });
 
-Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback']);
+Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback'])
+    ->name('payments.paystack.callback');
 Route::post('/payments/paystack/webhook', [PaymentController::class, 'webhook']);
-
 
 // Reports routes
 Route::prefix('reports')->middleware('auth:sanctum')->group(function () {
