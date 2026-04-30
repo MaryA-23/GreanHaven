@@ -29,7 +29,7 @@ class VerifyEmailController extends Controller
     //         config('app.frontend_url').RouteServiceProvider::HOME.'?verified=1'
     //     );
     // }
-     public function __invoke(EmailVerificationRequest $request): Response
+      public function __invoke(EmailVerificationRequest $request): Response
     {
         if (! $request->user()->hasVerifiedEmail()) {
             if ($request->user()->markEmailAsVerified()) {
@@ -42,5 +42,6 @@ class VerifyEmailController extends Controller
             200
         )->header('Content-Type', 'text/html');
     }
-    
 }
+    
+
