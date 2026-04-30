@@ -27,6 +27,7 @@ class AuthController extends Controller
             'last_name' => 'required|string|max:255',   
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
+            'role' => 'nullable|in:admin,user',
         ]);
 
         $user = User::create([
@@ -34,7 +35,7 @@ class AuthController extends Controller
             'last_name' => $request->last_name, 
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'user',
+            'role' => $request->role ?? 'user',
         ]);
 
         try {
