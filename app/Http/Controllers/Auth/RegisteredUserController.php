@@ -6,9 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Mail\WelcomeMail;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules;
 
@@ -26,12 +27,13 @@ class RegisteredUserController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'role' => 'user',
         ]);
 
         try {
             Mail::to($user->email)->send(new WelcomeMail($user));
         } catch (\Exception $mailException) {
-            \Log::error('Welcome email failed', [
+            Log::error('Welcome email failed', [
                 'message' => $mailException->getMessage(),
                 'user_id' => $user->id,
             ]);
@@ -41,7 +43,7 @@ class RegisteredUserController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Registration successful. Please check your email to verify your account.',
+            'message' => 'User registered successfully. Please verify your email before logging in.',
             'user' => $user,
         ], 201);
     }

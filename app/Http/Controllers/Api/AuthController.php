@@ -8,6 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Auth;
+use App\Mail\WelcomeMail;
+use Illuminate\Auth\Events\Registered;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 
 class AuthController extends Controller
@@ -16,68 +20,74 @@ class AuthController extends Controller
      * Register a new user.
      */
 
-     public function register(Request $request){
+     public function register(Request $request)
+    {
         $request->validate([
-            "first_name" => 'required',
-            "last_name"=> 'required',
-            "email"=> 'required|string|unique:users',
-            'password'=> 'required|string|min:8|confirmed',
-            'role' => 'sometimes|in:admin,user',
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users,email',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'role' => 'user',
+        ]);
+
+        try {
+            Mail::to($user->email)->send(new WelcomeMail($user));
+        } catch (\Exception $mailException) {
+            Log::error('Welcome email failed', [
+                'message' => $mailException->getMessage(),
+                'user_id' => $user->id,
             ]);
+        }
 
-            $user = User::create([
-                'first_name' => $request->first_name,
-                'last_name'  => $request->last_name,
-                'email'      => $request->email,
-                'password'   => Hash::make($request->password),
-                'role' => $request->role ?? 'user', 
-            ]);
-            
-            if ($request->filled('role')) {
-                $user->role = $request->role;  
-                $user->save();
-            }
-            $user->name = trim($user->first_name . ' ' . $user->last_name);
-            $user->save();
-            $token = $user->createToken('auth_token')->plainTextToken;
+        event(new Registered($user));
 
-            return response()->json([
-                'succes' => true,   
-                'message' => 'user registered successfully',
-                'token'=> $token,
-                ],201);
-
-            }  
-
+        return response()->json([
+            'success' => true,
+            'message' => 'User registered successfully. Please verify your email before logging in.',
+            'user' => $user,
+        ], 201);
+    }
+     
      /**
       * login user and return token
       */
 
-      public function login(Request $request)
-      {
+     public function login(Request $request)
+    {
         $request->validate([
-
             'email' => 'required|email',
-            'password'=> 'required',
+            'password' => 'required|string',
         ]);
 
-        if (!Auth::attempt($request->only('email','password'))) {
-            throw ValidationException::withMessages([
-                'email'=> ['Use valid account information that matches the database records'],
-                ]);
-      }
+        $user = User::where('email', $request->email)->first();
 
-      $user = User::where('email',$request->email)->firstorFail();
-      $token = $user->createToken('auth_token')->plainTextToken;
+        if (! $user || ! Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
+        }
 
-      return response()->json([
-        'succes' => true,
-        'message'=> 'Login Successful',
-        'user' => $user,
-        'token'=> $token,
-      ]);
+        if (! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please verify your email address before logging in.',
+            ], 403);
+        }
 
-      
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login Successful',
+            'user' => $user,
+            'token' => $token,
+        ], 200);
     }
     /**
        * logout user (revoke token)

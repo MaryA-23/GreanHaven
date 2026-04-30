@@ -89,6 +89,13 @@ class OrderController extends Controller
 
         $user = $request->user();
 
+        if (! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please verify your email before placing an order.'
+            ], 403);
+        }
+
         $existingOrder = Order::where('user_id', $user->id)
             ->where('status', 'pending_payment')
             ->whereHas('payment', function ($query) {
