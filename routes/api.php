@@ -9,6 +9,9 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\Api\Admin\DashboardController;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
+
+
 
 
 /*
@@ -128,3 +131,28 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/categories', [CategoryController::class, 'store']);
 });
 
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
+        $request->fulfill();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Email verified successfully.'
+        ]);
+    })->middleware('signed')->name('verification.verify');
+
+    Route::post('/email/verification-notification', function (Request $request) {
+        if ($request->user()->hasVerifiedEmail()) {
+            return response()->json([
+                'message' => 'Email already verified.'
+            ], 200);
+        }
+
+        $request->user()->sendEmailVerificationNotification();
+
+        return response()->json([
+            'message' => 'Verification link sent.'
+        ], 200);
+    })->middleware('throttle:6,1')->name('verification.send');
+});

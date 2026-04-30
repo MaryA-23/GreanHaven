@@ -68,13 +68,19 @@ class OrderController extends Controller
      */
    public function store(Request $request, InventoryService $inventoryService): JsonResponse
     {
+        if (! $request->user()->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please verify your email before placing an order.'
+            ], 403);
+        }
         if ($request->user()->role !== 'user') {
             return response()->json([
                 'success' => false,
                 'message' => 'Only users can create orders.',
             ], 403);
         }
-
+        
         $validated = $request->validate([
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
