@@ -38,14 +38,7 @@ class AuthController extends Controller
             'role' => $request->role ?? 'user',
         ]);
 
-        try {
-            Mail::to($user->email)->send(new WelcomeMail($user));
-        } catch (\Exception $mailException) {
-            Log::error('Welcome email failed', [
-                'message' => $mailException->getMessage(),
-                'user_id' => $user->id,
-            ]);
-        }
+         Mail::to($user->email)->send(new WelcomeMail($user));          
 
         event(new Registered($user));
 
@@ -75,6 +68,18 @@ class AuthController extends Controller
                 'message' => 'Invalid credentials',
             ], 401);
         }
+
+            // ✅ ADMIN BYPASS
+        if ($user->role === 'admin') {
+            $token = $user->createToken('auth_token')->plainTextToken;
+            return response()->json([
+                'success' => true,
+                'message' => 'Admin login successful',
+                'user' => $user,
+                'token' => $token,
+            ], 200);
+        }
+
 
         if (! $user->hasVerifiedEmail()) {
             return response()->json([
