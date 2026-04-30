@@ -23,6 +23,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'last_name',
         'email',
         'password',
+        'role',           
+        'company_id'
     ];
 
     /**
@@ -48,6 +50,22 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
     }
 
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($user) {
+            if ($user->first_name && $user->last_name) {
+                $user->name = trim($user->first_name . ' ' . $user->last_name);
+            }
+        });
+
+        static::updating(function ($user) {
+            if ($user->first_name && $user->last_name) {
+                $user->name = trim($user->first_name . ' ' . $user->last_name);
+            }
+        });
+    }
     public function getFullNameAttribute()
     {
         return "{$this->first_name} {$this->last_name}";
@@ -65,4 +83,13 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->role === 'admin';
     }
     
+    public function isUser(): bool
+    {
+        return $this->role === 'user';
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
 }
