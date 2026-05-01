@@ -10,6 +10,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\Api\Admin\DashboardController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
+use App\Http\Controllers\Auth\VerifyEmailController;    
 
 
 
@@ -38,6 +39,10 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
   // Example: farming-related routes
   // Route::apiResource('farms', FarmController::class);
 });
+
+Route::get('/email/verify/{id}/{hash}', VerifyEmailController::class)
+    ->middleware(['signed'])
+    ->name('verification.verify');  
 
 Route::prefix('products')->group(function () {
 

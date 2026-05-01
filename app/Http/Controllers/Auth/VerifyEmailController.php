@@ -29,71 +29,19 @@ class VerifyEmailController extends Controller
     //         config('app.frontend_url').RouteServiceProvider::HOME.'?verified=1'
     //     );
     // }
-     public function __invoke(EmailVerificationRequest $request): Response
-{
-    if (! $request->user()->hasVerifiedEmail()) {
-        if ($request->user()->markEmailAsVerified()) {
-            event(new Verified($request->user()));
+      public function __invoke(EmailVerificationRequest $request): Response
+    {
+        if (! $request->user()->hasVerifiedEmail()) {
+            if ($request->user()->markEmailAsVerified()) {
+                event(new Verified($request->user()));
+            }
         }
-    }
 
-    return response(
-        '
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Email Verified</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    background-color: #f4f6f9;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    margin: 0;
-                }
-                .card {
-                    background: #ffffff;
-                    padding: 30px;
-                    border-radius: 10px;
-                    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-                    text-align: center;
-                    max-width: 400px;
-                }
-                h2 {
-                    color: #28a745;
-                }
-                p {
-                    color: #555;
-                }
-                a {
-                    display: inline-block;
-                    margin-top: 15px;
-                    padding: 10px 20px;
-                    background-color: #28a745;
-                    color: white;
-                    text-decoration: none;
-                    border-radius: 5px;
-                }
-                a:hover {
-                    background-color: #218838;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="card">
-                <h2>✅ Email Verified</h2>
-                <p>Your email has been successfully verified.</p>
-                <p>You can now return to Greenhaven and log in.</p>
-                <a href="https://cornbread-iciness-matrix.ngrok-free.dev">Go Back</a>
-            </div>
-        </body>
-        </html>
-        ',
-        200
-    )->header('Content-Type', 'text/html');
-}
-}
+        return response(
+            '<h2>Email verified successfully</h2><p>You can now return to Greenhaven and log in.</p>',
+            200
+        )->header('Content-Type', 'text/html');
+    }
+ }
     
 
