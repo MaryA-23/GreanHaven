@@ -41,8 +41,8 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 });
 
 Route::get('/email/verify/{id}/{hash}', VerifyEmailController::class)
-    ->middleware(['signed'])
-    ->name('verification.verify');  
+    ->middleware(['signed']) // removed 'auth'
+    ->name('verification.verify');
 
 Route::prefix('products')->group(function () {
 

@@ -29,18 +29,17 @@ class VerifyEmailController extends Controller
     //         config('app.frontend_url').RouteServiceProvider::HOME.'?verified=1'
     //     );
     // }
-      public function __invoke(EmailVerificationRequest $request): Response
+    public function __invoke(EmailVerificationRequest $request)
     {
-        if (! $request->user()->hasVerifiedEmail()) {
-            if ($request->user()->markEmailAsVerified()) {
-                event(new Verified($request->user()));
-            }
+        if ($request->user()->hasVerifiedEmail()) {
+            return response('<h3>Already verified</h3>', 200)
+                ->header('Content-Type', 'text/html');
         }
 
-        return response(
-            '<h2>Email verified successfully</h2><p>You can now return to Greenhaven and log in.</p>',
-            200
-        )->header('Content-Type', 'text/html');
+        $request->fulfill(); // verifies email
+
+        return response('<h2>Email verified successfully</h2>', 200)
+            ->header('Content-Type', 'text/html');
     }
  }
     
