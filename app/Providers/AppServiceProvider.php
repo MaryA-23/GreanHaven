@@ -18,7 +18,7 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
+     public function boot(): void
     {
         if (config('app.url')) {
             URL::forceRootUrl(config('app.url'));
