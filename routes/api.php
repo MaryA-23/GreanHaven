@@ -41,10 +41,6 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
   // Route::apiResource('farms', FarmController::class);
 });
 
-Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__invoke'])
-    ->middleware('signed')
-    ->name('verification.verify');
-
 Route::prefix('products')->group(function () {
 
     // Public/customer browsing
@@ -138,27 +134,45 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 });
 
 
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
-        $request->fulfill();
+// Route::middleware('auth:sanctum')->group(function () {
+//     Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
+//         $request->fulfill();
 
+//         return response()->json([
+//             'success' => true,
+//             'message' => 'Email verified successfully.'
+//         ]);
+//     })->middleware('signed')->name('verification.verify');
+
+//     Route::post('/email/verification-notification', function (Request $request) {
+//         if ($request->user()->hasVerifiedEmail()) {
+//             return response()->json([
+//                 'message' => 'Email already verified.'
+//             ], 200);
+//         }
+
+//         $request->user()->sendEmailVerificationNotification();
+
+//         return response()->json([
+//             'message' => 'Verification link sent.'
+//         ], 200);
+//     })->middleware('throttle:6,1')->name('verification.send');
+// });
+
+Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__invoke'])
+    ->middleware('signed')
+    ->name('verification.verify');
+
+Route::middleware('auth:sanctum')->post('/email/verification-notification', function (Request $request) {
+    if ($request->user()->hasVerifiedEmail()) {
         return response()->json([
-            'success' => true,
-            'message' => 'Email verified successfully.'
-        ]);
-    })->middleware('signed')->name('verification.verify');
-
-    Route::post('/email/verification-notification', function (Request $request) {
-        if ($request->user()->hasVerifiedEmail()) {
-            return response()->json([
-                'message' => 'Email already verified.'
-            ], 200);
-        }
-
-        $request->user()->sendEmailVerificationNotification();
-
-        return response()->json([
-            'message' => 'Verification link sent.'
+            'message' => 'Email already verified.'
         ], 200);
-    })->middleware('throttle:6,1')->name('verification.send');
-});
+    }
+
+    $request->user()->sendEmailVerificationNotification();
+
+    return response()->json([
+        'message' => 'Verification link sent.'
+    ], 200);
+})->middleware('throttle:6,1')->name('verification.send');
