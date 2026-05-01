@@ -135,16 +135,16 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__invoke'])
     ->name('verification.verify');
 
-Route::middleware('auth:sanctum')->post('/email/verification-notification', function (Request $request) {
-    if ($request->user()->hasVerifiedEmail()) {
-        return response()->json([
-            'message' => 'Email already verified.'
-        ], 200);
-    }
+// Route::middleware('auth:sanctum')->post('/email/verification-notification', function (Request $request) {
+//     if ($request->user()->hasVerifiedEmail()) {
+//         return response()->json([
+//             'message' => 'Email already verified.'
+//         ], 200);
+//     }
 
-    $request->user()->sendEmailVerificationNotification();
+//     $request->user()->sendEmailVerificationNotification();
 
-    return response()->json([
-        'message' => 'Verification link sent.'
-    ], 200);
-})->middleware('throttle:6,1')->name('verification.send');
+//     return response()->json([
+//         'message' => 'Verification link sent.'
+//     ], 200);
+// })->middleware('throttle:6,1')->name('verification.send');
