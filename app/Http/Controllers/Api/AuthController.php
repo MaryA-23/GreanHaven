@@ -20,25 +20,29 @@ class AuthController extends Controller
      * Register a new user.
      */
 
-     public function register(Request $request)
+    public function register(Request $request)
     {
         $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',   
+            'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'nullable|in:admin,user',
         ]);
 
         $user = User::create([
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name, 
+            'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role ?? 'user',
+            'role' => 'user',
         ]);
 
-         Mail::to($user->email)->send(new WelcomeMail($user));          
+        try {
+            Mail::to($user->email)->send(new WelcomeMail($user));
+        } catch (\Exception $mailException) {
+            Log::error('Welcome email failed', [
+                'message' => $mailException->getMessage(),
+                'user_id' => $user->id,
+            ]);
+        }
 
         event(new Registered($user));
 
