@@ -133,7 +133,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
 
 Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__invoke'])
-    ->middleware('signed')
     ->name('verification.verify');
 
 Route::middleware('auth:sanctum')->post('/email/verification-notification', function (Request $request) {

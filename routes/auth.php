@@ -29,5 +29,4 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
                 ->name('logout');
 
 Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__invoke'])
-    ->middleware(['signed'])
     ->name('verification.verify');
