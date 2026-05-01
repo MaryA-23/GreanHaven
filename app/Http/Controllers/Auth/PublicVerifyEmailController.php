@@ -15,12 +15,9 @@ class PublicVerifyEmailController extends Controller
     {
         $user = User::findOrFail($id);
 
-        if (! hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
-            abort(403, 'Invalid verification link.');
-        }
-
-        if (! $request->hasValidSignature()) {
-            abort(403, 'Verification link has expired or is invalid.');
+        // ONLY ONE CHECK (keep it simple)
+        if ($hash !== sha1($user->getEmailForVerification())) {
+            return response('Invalid verification link', 403);
         }
 
         if (! $user->hasVerifiedEmail()) {
@@ -29,7 +26,7 @@ class PublicVerifyEmailController extends Controller
         }
 
         return response(
-            '<h2>Email verified successfully</h2><p>You can now return to Greenhaven and log in.</p>',
+            '<h2>Email verified successfully</h2><p>You can now login.</p>',
             200
         )->header('Content-Type', 'text/html');
     }
