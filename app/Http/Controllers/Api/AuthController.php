@@ -20,19 +20,22 @@ class AuthController extends Controller
      * Register a new user.
      */
 
-    public function register(Request $request)
+     public function register(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',   
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
+            'role' => 'nullable|in:admin,user',
         ]);
 
         $user = User::create([
-            'name' => $request->name,
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name, 
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'user',
+            'role' => $request->role ?? 'user',
         ]);
 
         try {
@@ -43,16 +46,13 @@ class AuthController extends Controller
                 'user_id' => $user->id,
             ]);
         }
-
         event(new Registered($user));
-
         return response()->json([
             'success' => true,
             'message' => 'User registered successfully. Please verify your email before logging in.',
             'user' => $user,
         ], 201);
     }
-     
      /**
       * login user and return token
       */
