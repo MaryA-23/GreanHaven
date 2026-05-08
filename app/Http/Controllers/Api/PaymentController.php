@@ -219,8 +219,8 @@ class PaymentController extends Controller
      * - This method first extracts the 'reference' value (query param or JSON payload).
      * - If there's no reference, it returns a clear error (so we never call Paystack verify with empty string).
      * - It then calls Paystack verify endpoint with the reference and processes the verified response.
-     */
-    public function callback(Request $request, InventoryService $inventoryService)
+        */
+    public function callback(Request $request)
     {
         $reference = $request->query('reference');
 
@@ -232,24 +232,21 @@ class PaymentController extends Controller
 
         try {
             $paymentDetails = Http::withToken(env('PAYSTACK_SECRET_KEY'))
-            ->get("https://api.paystack.co/transaction/verify/{$reference}")
-            ->json();
+                ->get("https://api.paystack.co/transaction/verify/{$reference}")
+                ->json();
 
-             if (!$paymentDetails || ($paymentDetails['status'] ?? false) !== true || !isset($paymentDetails['data'])) {
-                    return response()->json([
-                        'error' => 'Unable to verify payment',
-                        'details' => $paymentDetails,
-                    ], 400);
-                }
-
-               $data = $paymentDetails['data'];
-
-            if ($data['status'] !== 'success') {
+            if (
+                !$paymentDetails ||
+                ($paymentDetails['status'] ?? false) !== true ||
+                !isset($paymentDetails['data'])
+            ) {
                 return response()->json([
-                    'error' => 'Payment was not successful'
+                    'error' => 'Unable to verify payment',
+                    'details' => $paymentDetails,
                 ], 400);
             }
 
+            $data = $paymentDetails['data'];
             $orderId = $data['metadata']['order_id'] ?? null;
             $userId = $data['metadata']['user_id'] ?? null;
 
@@ -259,126 +256,30 @@ class PaymentController extends Controller
                 ], 400);
             }
 
-            DB::beginTransaction();
-
             $order = Order::with(['items.product', 'payment'])
-                ->lockForUpdate()
-                ->findOrFail($orderId);
-
-            if ((int) $order->user_id !== (int) $userId) {
-                DB::rollBack();
-
-                return response()->json([
-                    'error' => 'Payment does not belong to this user'
-                ], 403);
-            }
-
-            $payment = Payment::where('order_id', $order->id)
+                ->where('id', $orderId)
                 ->where('user_id', $userId)
-                ->lockForUpdate()
                 ->first();
 
-            if (!$payment) {
-                DB::rollBack();
-
+            if (!$order) {
                 return response()->json([
-                    'error' => 'Payment record not found'
+                    'error' => 'Order not found'
                 ], 404);
             }
 
-            if ($payment->status === 'paid') {
-                DB::rollBack();
+            $payment = $order->payment;
 
-                return response()->json([
-                    'message' => 'Payment already verified',
-                    'order' => $order,
-                    'payment' => $payment
-                ], 200);
-            }
-
-            if (
-                $payment->status === 'expired' ||
-                ($payment->expires_at && now()->greaterThan($payment->expires_at))
-            ) {
-                $payment->update([
-                    'status' => 'expired',
-                    'expired_at' => now(),
-                ]);
-
-                $order->update([
-                    'status' => 'expired',
-                ]);
-
-                DB::commit();
-
-                return response()->json([
-                    'error' => 'Payment has expired. Please create a new order.'
-                ], 400);
-            }
-
-            $paidAmount = $data['amount'] / 100;
-
-            if ((float) $paidAmount !== (float) $order->total_price) {
-                DB::rollBack();
-
-                return response()->json([
-                    'error' => 'Payment amount does not match order amount'
-                ], 400);
-            }
-
-           foreach ($order->items as $item) {
-            $product = Product::where('id', $item->product_id)
-                ->lockForUpdate()
-                ->first();
-
-            if (!$product) {
-                DB::rollBack();
-
-                return response()->json([
-                    'error' => 'Product not found for order item'
-                ], 404);
-            }
-
-            $inventoryService->deductStock($product, $item->quantity);
-        }
-
-            $payment->update([
-                'amount' => $paidAmount,
-                'status' => 'paid',
-                'payment_method' => 'paystack',
-                'gateway_reference' => $data['reference'],
-                'paid_at' => now(),
-            ]);
-
-            $order->update([
-                'status' => 'paid',
-            ]);
-
-             DB::commit();
-
-                       try {
-                Mail::to($order->user->email)->send(
-                    new PaymentSuccessMail(
-                        $order->fresh(['items.product', 'payment', 'user']),
-                        $payment->fresh(),
-                        $order->user
-                    )
-                );
-            } catch (\Exception $mailException) {
-                Log::error('Payment success email failed', [
-                    'message' => $mailException->getMessage(),
-                    'order_id' => $order->id,
-                ]);
-            }
             return response()->json([
-                'message' => 'Payment verified successfully',
-                'order' => $order->fresh(['items.product', 'payment']),
-                'payment' => $payment->fresh(),
+                'message' => 'Payment verification checked successfully',
+                'paystack_status' => $data['status'] ?? null,
+                'order_status' => $order->status,
+                'payment_status' => $payment?->status,
+                'reference' => $reference,
+                'order' => $order,
+                'payment' => $payment,
             ], 200);
 
         } catch (\Exception $e) {
-            DB::rollBack();
-
             Log::error('Paystack callback error', [
                 'message' => $e->getMessage(),
                 'reference' => $reference,
@@ -577,10 +478,11 @@ class PaymentController extends Controller
 
         $orderId = $data['metadata']['order_id'] ?? null;
         $userId = $data['metadata']['user_id'] ?? null;
+        $paymentId = $data['metadata']['payment_id'] ?? null;
         $reference = $data['reference'] ?? null;
         $paidAmount = isset($data['amount']) ? $data['amount'] / 100 : null;
 
-        if (!$orderId || !$userId || !$reference || !$paidAmount) {
+        if (!$orderId || !$userId || !$reference || is_null($paidAmount)) {
             return response()->json(['message' => 'Incomplete metadata'], 400);
         }
 
@@ -591,10 +493,21 @@ class PaymentController extends Controller
                 ->lockForUpdate()
                 ->findOrFail($orderId);
 
-            $payment = Payment::where('order_id', $order->id)
+            if ((int) $order->user_id !== (int) $userId) {
+                DB::rollBack();
+                return response()->json(['message' => 'Order ownership mismatch'], 403);
+            }
+
+            $paymentQuery = Payment::where('order_id', $order->id)
                 ->where('user_id', $userId)
-                ->lockForUpdate()
-                ->first();
+                ->where('reference', $reference)
+                ->lockForUpdate();
+
+            if ($paymentId) {
+                $paymentQuery->where('id', $paymentId);
+            }
+
+            $payment = $paymentQuery->first();
 
             if (!$payment) {
                 DB::rollBack();
@@ -624,7 +537,7 @@ class PaymentController extends Controller
                 return response()->json(['message' => 'Payment expired'], 200);
             }
 
-            if ((float) $paidAmount !== (float) $order->total_price) {
+            if (round((float) $paidAmount, 2) !== round((float) $payment->amount, 2)) {
                 DB::rollBack();
                 return response()->json(['message' => 'Amount mismatch'], 400);
             }
@@ -654,6 +567,10 @@ class PaymentController extends Controller
                 'status' => 'paid',
             ]);
 
+            if ($order->user && $order->user->cart) {
+                $order->user->cart->items()->delete();
+            }
+
             DB::commit();
 
             try {
@@ -678,6 +595,7 @@ class PaymentController extends Controller
 
             Log::error('Paystack webhook error', [
                 'message' => $e->getMessage(),
+                'reference' => $reference,
             ]);
 
             return response()->json([
