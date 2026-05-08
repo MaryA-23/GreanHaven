@@ -10,6 +10,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\Api\Admin\DashboardController;   
 use App\Http\Controllers\Auth\PublicVerifyEmailController;  
+use App\Http\Controllers\CartController;
 
 
 
@@ -129,6 +130,15 @@ Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::post('/categories', [CategoryController::class, 'store']);
+});
+
+Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
+    Route::get('/', [CartController::class, 'index']);
+    Route::post('/items', [CartController::class, 'add']);
+    Route::patch('/items/{id}', [CartController::class, 'update']);
+    Route::delete('/items/{id}', [CartController::class, 'remove']);
+    Route::delete('/clear', [CartController::class, 'clear']);
+    Route::post('/checkout', [CartController::class, 'checkout']);
 });
 
 

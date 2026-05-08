@@ -68,14 +68,8 @@ class PaymentController extends Controller
 
         $order = Order::with(['user', 'payment'])
             ->where('id', $request->order_id)
+            ->where('user_id', $user->id)
             ->firstOrFail();
-
-        if ((int) $order->user_id !== (int) $user->id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized payment attempt.'
-            ], 403);
-        }
 
         if ($order->status !== 'pending_payment') {
             return response()->json([
@@ -119,13 +113,22 @@ class PaymentController extends Controller
             ], 400);
         }
 
+        // Save or refresh local reference before sending to Paystack
+        $reference = $payment->reference ?: 'PAY-' . now()->timestamp . '-' . $payment->id;
+
+        $payment->update([
+            'reference' => $reference,
+        ]);
+
         $callbackUrl = config('services.paystack.callback_url');
 
         $paymentData = [
-            'amount' => (int) round($order->total_price * 100),
+            'amount' => (int) round($payment->amount * 100),
             'email' => $order->user->email,
+            'reference' => $reference,
             'metadata' => [
                 'order_id' => $order->id,
+                'payment_id' => $payment->id,
                 'user_id' => $order->user_id,
             ],
             'callback_url' => $callbackUrl,
@@ -137,6 +140,8 @@ class PaymentController extends Controller
 
             Log::info('Paystack init payload', [
                 'order_id' => $order->id,
+                'payment_id' => $payment->id,
+                'reference' => $reference,
                 'callback_url' => $callbackUrl,
                 'payment_url' => $paymentUrl,
                 'user_email' => $order->user->email,
@@ -155,6 +160,7 @@ class PaymentController extends Controller
                 Log::error('Payment email failed', [
                     'message' => $mailException->getMessage(),
                     'order_id' => $order->id,
+                    'payment_id' => $payment->id,
                 ]);
             }
 
@@ -162,6 +168,7 @@ class PaymentController extends Controller
                 'success' => true,
                 'message' => 'Payment link generated.',
                 'authorization_url' => $paymentUrl,
+                'reference' => $reference,
                 'payment_expires_at' => $payment->expires_at,
                 'callback_url' => $callbackUrl,
             ], 200);
@@ -170,6 +177,8 @@ class PaymentController extends Controller
             Log::error('Paystack initialize failed', [
                 'message' => $e->getMessage(),
                 'order_id' => $order->id,
+                'payment_id' => $payment->id,
+                'reference' => $reference,
                 'callback_url' => $callbackUrl,
             ]);
 
@@ -179,7 +188,7 @@ class PaymentController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
-    }  
+    }
    /**
      * Record a new payment.
      */
