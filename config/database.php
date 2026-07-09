@@ -34,6 +34,19 @@ return [
     */
 
     'connections' => [
+        'system' => [  
+        'driver' => 'mysql',
+        'host' => env('TENANCY_HOST', env('DB_HOST')),
+        'port' => env('TENANCY_PORT', env('DB_PORT')),
+        'database' => env('TENANCY_DATABASE', 'greenhaven_system'),
+        'username' => env('TENANCY_USERNAME', env('root')),
+        'password' => env('TENANCY_PASSWORD', env('Fellowship@2')),
+        'charset' => 'utf8mb4',
+        'collation' => 'utf8mb4_unicode_ci',
+        'prefix' => '',
+        'strict' => true,
+        'engine' => null,
+        ],
 
         'sqlite' => [
             'driver' => 'sqlite',
