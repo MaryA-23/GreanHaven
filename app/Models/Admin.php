@@ -14,7 +14,7 @@ class Admin extends Authenticable
 {
     use HasFactory, Notifiable, SoftDeletes, HasApiTokens;
 
-    protected $connection = 'system';
+// protected $connection = 'system';
 
     protected $fillable = [
         'uuid',
