@@ -2,13 +2,13 @@
 
 namespace App\Listeners;
 
-use App\Events\ProductReady;
+use App\Events\ProductsReady;
 use App\Notifications\ProductReadyNotification;
 use Illuminate\Support\Facades\Log;
 
-class SendProductReadyNotification
+class SendProductsReadyNotification
 {
-    public function handle(ProductReady $event)
+    public function handle(ProductsReady $event)
     {
         $pro = $event->Product;
 
