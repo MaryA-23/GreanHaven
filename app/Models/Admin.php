@@ -18,8 +18,8 @@ class Admin extends Authenticable
 
     protected $fillable = [
         'uuid',
-        'first_name',
-        'last_name',
+        'othernames',
+        'surname',
         'fullname',
         'email',
         'phone',
