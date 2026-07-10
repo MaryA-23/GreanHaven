@@ -9,7 +9,7 @@ use App\Models\Admin;
 use App\Notifications\Admin\AdminCreationNotification;
 use App\Notifications\Admin\AdminRoleChangeNotification;
 use Illuminate\Support\Facades\DB;
-use Keygen\Keygen;
+use App\Keygen\Keygen;
 
 use Ramsey\Uuid\Uuid;
 use Illuminate\Support\Str;

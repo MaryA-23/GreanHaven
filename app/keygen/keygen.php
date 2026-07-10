@@ -1,6 +1,6 @@
 <?php
 
-namespace Keygen;
+namespace App\Keygen;
 
 class Keygen
 {

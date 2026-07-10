@@ -11,7 +11,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\Api\Admin\DashboardController;   
 use App\Http\Controllers\Auth\PublicVerifyEmailController;  
 use App\Http\Controllers\CartController;
-use App\Http\Controllers\Auth\AdminController;
+use App\Http\Controllers\Admin\AdminController;
 
 
 
