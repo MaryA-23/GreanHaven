@@ -1,13 +1,13 @@
 <?php
 
-namespace App\Http\Controllers\Api\Admin;
+namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Admin;
 use App\Notifications\Admin\AdminCreationNotification;
-use App\Notifications\Admin\AdminRoleChangedNotification;
+use App\Notifications\Admin\AdminRoleChangeNotification;
 use Illuminate\Support\Facades\DB;
 use Keygen\Keygen;
 
@@ -43,9 +43,9 @@ class AdminController extends Controller
                 ],404);
             }
 
-            // if(password_verify(request()->password,$admin->password))
-            if (Hash::check(request()->password, $admin->password))
-                {
+            if(password_verify(request()->password,$admin->password)){
+
+                // $access_token=$admin->createToken('Admin_login_access_token')->accessToken;
 
                 return response()->json([
                     'status'        =>'success',
@@ -93,11 +93,13 @@ class AdminController extends Controller
             $uuid = request()->input('uuid');
             // $superadmin=auth()->guard('admin')->user()->role;
             $superadmin = Admin::query()->where('uuid',$uuid)->first();
-            if (!$superadmin) {
+            if($superadmin->role !=='super_admin'){
                 return response()->json([
-                    'status' => 'failed',
-                    'message' => 'Super admin not found.'
-                ], 404);
+                    'status'         =>'failed',
+                    'message'       =>'You are not a super admin'
+
+                ],403);
+
             }
 
 
@@ -192,12 +194,15 @@ class AdminController extends Controller
                     'role'      =>$roletext
                 ];
 
-                $toSuperAdmin->notify(new AdminRoleChangedNotification($mail_details));
+                $toSuperAdmin->notify(new AdminRoleChangeNotification($mail_details));
                 return response()->json([
                     'status'    =>'success',
                     'message'   =>'admin updated successfully'
                 ],200);
 
+                      return response()->json([
+                        'status'    =>'success',
+                        'message'   =>'Admin role updated successfully']);
              }else{
                       return response()->json([
                         'status'    =>'failed',
