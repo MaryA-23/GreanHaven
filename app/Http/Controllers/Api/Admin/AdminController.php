@@ -43,9 +43,9 @@ class AdminController extends Controller
                 ],404);
             }
 
-            if(password_verify(request()->password,$admin->password)){
-
-                // $access_token=$admin->createToken('Admin_login_access_token')->accessToken;
+            // if(password_verify(request()->password,$admin->password))
+            if (Hash::check(request()->password, $admin->password))
+                {
 
                 return response()->json([
                     'status'        =>'success',
@@ -93,13 +93,11 @@ class AdminController extends Controller
             $uuid = request()->input('uuid');
             // $superadmin=auth()->guard('admin')->user()->role;
             $superadmin = Admin::query()->where('uuid',$uuid)->first();
-            if($superadmin->role !=='super_admin'){
+            if (!$superadmin) {
                 return response()->json([
-                    'statu'         =>'failed',
-                    'message'       =>'You are not a super admin'
-
-                ],403);
-
+                    'status' => 'failed',
+                    'message' => 'Super admin not found.'
+                ], 404);
             }
 
 
@@ -200,9 +198,6 @@ class AdminController extends Controller
                     'message'   =>'admin updated successfully'
                 ],200);
 
-                      return response()->json([
-                        'status'    =>'success',
-                        'message'   =>'Admin role updated successfully']);
              }else{
                       return response()->json([
                         'status'    =>'failed',
