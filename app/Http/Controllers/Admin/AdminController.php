@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Admin;
-use App\Notifications\Admin\AdminCreationNotification;
-use App\Notifications\Admin\AdminRoleChangeNotification;
+use App\Notifications\AdminCreationNotification;
+use App\Notifications\AdminRoleChangedNotification;
 use Illuminate\Support\Facades\DB;
 use App\Keygen\Keygen;
 
@@ -194,7 +194,7 @@ class AdminController extends Controller
                     'role'      =>$roletext
                 ];
 
-                $toSuperAdmin->notify(new AdminRoleChangeNotification($mail_details));
+                $toSuperAdmin->notify(new AdminRoleChangedNotification($mail_details));
                 return response()->json([
                     'status'    =>'success',
                     'message'   =>'admin updated successfully'
