@@ -8,7 +8,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\Api\Admin\DashboardController;   
+use App\Http\Controllers\Admin\DashboardController;   
 use App\Http\Controllers\Auth\PublicVerifyEmailController;  
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\Admin\AdminController;
@@ -164,11 +164,13 @@ Route::group(['prefix'=>'admin'], function(){
     //Tip:: login as an admin
     Route::post('login',[AdminController::class,'login']);
 
-    Route::middleware(['super.admin'])->group(function(){
+    // Route::middleware(['super.admin'])->group(function(){
 
-        //Tip:: Allowing super-admins to create account for new admins or super-admins
-        Route::post('register',[AdminController::class,'addnewuser']);
-    });
+    //     //Tip:: Allowing super-admins to create account for new admins or super-admins
+    //     Route::post('register',[AdminController::class,'addnewuser']);
+    // });
+
+    Route::post('register',[AdminController::class,'addnewuser']);
 
     //changing of Admins roles
     Route::post('change_admin_role',[AdminController::class,'changerole']);
