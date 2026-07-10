@@ -14,12 +14,23 @@ class AdminMiddleware
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
-    {   
-         if ($request->user()->role !== 'admin') {
-        return response()->json([
-            'error' => 'Unauthorized. Only admins can perform this action.'
-        ], 403);
-    }
+    {
+        $admin = $request->user();
+
+        if (!$admin) {
+            return response()->json([
+                'error' => 'Unauthenticated. Only authenticated admins can access this resource.'
+            ], 401);
+        }
+
+
+        if ($admin->role !== 'super_admin') {
+            return response()->json([
+                'error' => 'Unauthorized. Only super admins can perform this action.'
+            ], 403);
+        }
+
+
         return $next($request);
     }
 }
