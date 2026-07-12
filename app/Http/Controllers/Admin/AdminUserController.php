@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Http\Resources\AdminUserResource;
 
 class AdminUserController extends Controller
 {
@@ -35,7 +36,7 @@ class AdminUserController extends Controller
                 return response()->json([
                     'status' => 'success',
                     'total_users' => $users->count(),
-                    'users' => $users
+                    'users' => AdminUserResource::collection($users),
                 ], 200);
             } catch (\Exception $e) {                
                 return response()->json([
