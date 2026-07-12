@@ -34,15 +34,13 @@ class AdminUserController extends Controller
 
                 return response()->json([
                     'status' => 'success',
-                    'message' => 'Users retrieved successfully',
-                    'data' => $users
+                    'user' => $users
                 ], 200);
             } catch (\Exception $e) {                
                 return response()->json([
                     'status' => 'failed',
                     'message' => $e->getMessage()
                 ], 500);    
-           
             }
-    }
+            }
 }
