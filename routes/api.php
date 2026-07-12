@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Auth\PublicVerifyEmailController;  
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\AdminUserController;
 
 
 
@@ -174,6 +175,11 @@ Route::group(['prefix'=>'admin'], function(){
 
     //changing of Admins roles
     Route::post('change_admin_role',[AdminController::class,'changerole']);
+    Route::get('profile/{uuid}', [AdminController::class,'profile']);
+});
 
+Route::prefix('admin')->group(function () {
+
+    Route::post('/users', [AdminUserController::class, 'index']);
 
 });

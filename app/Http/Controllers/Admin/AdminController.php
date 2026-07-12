@@ -131,7 +131,7 @@ class AdminController extends Controller
                 'name'      =>request()->othernames,
                 'email'     =>request()->email,
                 'password'  => $password,
-                'url'       =>'www.nubiaemr/adminportal'
+                'url'       =>'www.greenhaven/adminportal'
             ];
 
             $newadmin->notify(new AdminCreationNotification($mail_details));
@@ -216,6 +216,34 @@ class AdminController extends Controller
             ],500);
         }
     }
+
+        public function profile($uuid)
+        {
+            try {
+
+                $admin = Admin::where('uuid', $uuid)->first();
+
+                if (!$admin) {
+                    return response()->json([
+                        'status' => 'failed',
+                        'message' => 'Admin not found'
+                    ],404);
+                }
+
+                return response()->json([
+                    'status' => 'success',
+                    'admin' => $admin
+                ]);
+
+            } catch (\Exception $e) {
+
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => $e->getMessage()
+                ],500);
+
+            }
+        }
 
 
 }
