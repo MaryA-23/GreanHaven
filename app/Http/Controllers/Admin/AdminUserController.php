@@ -30,7 +30,7 @@ class AdminUserController extends Controller
               $users = DB::connection('system')
             ->table($request->website_uuid . '.users')
             ->orderBy('created_at', 'desc')
-            ->paginate(20);
+            ->get();
 
                 return response()->json([
                     'status' => 'success',
