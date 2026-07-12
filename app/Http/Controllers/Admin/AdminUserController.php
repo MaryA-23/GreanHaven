@@ -32,13 +32,12 @@ class AdminUserController extends Controller
             ->table($request->website_uuid . '.users')
             ->orderBy('created_at', 'desc')
             ->get();
-            dd($users->first());
-
-                // return response()->json([
-                //     'status' => 'success',
-                //     'total_users' => $users->count(),
-                //     'users' => AdminUserResource::collection($users),
-                // ], 200);
+                dd($users->first());
+                return response()->json([
+                    'status' => 'success',
+                    'total_users' => $users->count(),
+                    'users' => AdminUserResource::collection($users),
+                ], 200);
             } catch (\Exception $e) {                
                 return response()->json([
                     'status' => 'failed',
