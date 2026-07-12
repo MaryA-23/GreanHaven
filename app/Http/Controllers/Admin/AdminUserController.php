@@ -34,7 +34,8 @@ class AdminUserController extends Controller
 
                 return response()->json([
                     'status' => 'success',
-                    'user' => $users
+                    'total_users' => $users->count(),
+                    'users' => $users
                 ], 200);
             } catch (\Exception $e) {                
                 return response()->json([
