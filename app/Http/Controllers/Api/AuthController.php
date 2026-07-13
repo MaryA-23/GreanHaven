@@ -73,9 +73,8 @@ class AuthController extends Controller
             ], 401);
         }
            //  Update last login
-            $user->update([
-                'last_login' => now(),
-            ]);
+           $user->last_login = now();
+            $user->save();
 
             // ADMIN BYPASS
         if ($user->role === 'admin') {
