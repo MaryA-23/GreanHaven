@@ -76,8 +76,7 @@ class AuthController extends Controller
             $user->update([
              'last_login' => now(),
              ]);
-             dd($user->fresh());
-
+             
             // ADMIN BYPASS
         if ($user->role === 'admin') {
             $token = $user->createToken('auth_token')->plainTextToken;
