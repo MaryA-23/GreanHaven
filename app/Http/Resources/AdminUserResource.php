@@ -20,6 +20,8 @@ class AdminUserResource extends JsonResource
         'status' => $this->status,
         'last_login' => $this->last_login,
         'created_at' => $this->created_at,
+        'gender' => $this->gender,
+        'profile_picture' => $this->profile_picture,    
         ];
     }
 }
