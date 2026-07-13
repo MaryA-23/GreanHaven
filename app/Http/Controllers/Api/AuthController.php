@@ -72,8 +72,12 @@ class AuthController extends Controller
                 'message' => 'Invalid credentials',
             ], 401);
         }
+           //  Update last login
+            $user->update([
+                'last_login' => now(),
+            ]);
 
-            // ✅ ADMIN BYPASS
+            // ADMIN BYPASS
         if ($user->role === 'admin') {
             $token = $user->createToken('auth_token')->plainTextToken;
             return response()->json([
