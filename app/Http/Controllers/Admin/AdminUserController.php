@@ -35,6 +35,7 @@ class AdminUserController extends Controller
 
                 return response()->json([
                     'status' => 'success',
+                    'message' => 'Users fetched successfully',
                     'total_users' => $users->count(),
                     'users' => AdminUserResource::collection($users),
                 ], 200);
