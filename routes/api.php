@@ -181,5 +181,6 @@ Route::group(['prefix'=>'admin'], function(){
 Route::prefix('admin')->group(function () {
 
     Route::post('/users', [AdminUserController::class, 'index']);
+    Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
 
 });

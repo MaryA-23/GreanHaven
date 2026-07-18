@@ -46,4 +46,48 @@ class AdminUserController extends Controller
                 ], 500);    
             }
             }
+
+    public function show(Request $request, $uuid)
+    {
+        //validate the request
+        $request -> validate([
+            'uuid' => 'required',
+            'website_uuid' => 'required',
+            'user_id' => 'required',
+        ]);
+
+        //check if the admin exists
+        $admin = Admin::where('uuid', $request->uuid)->first();
+        if(!$admin){
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Admin not found'
+            ], 404);        
+            }
+
+            try {
+              $user = DB::connection('system')
+            ->table($request->website_uuid . '.users')
+            ->where('id', $request->user_id)
+            ->first();
+
+                if(!$user){
+                    return response()->json([
+                        'status' => 'failed',
+                        'message' => 'User not found'
+                    ], 404);        
+                    }
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'User fetched successfully',
+                    'user' => new AdminUserResource($user),
+                ], 200);
+            } catch (\Exception $e) {                
+                return response()->json([
+                    'status' => 'failed',
+                    'message' => $e->getMessage()
+                ], 500);    
+            }
+    }
 }
