@@ -81,7 +81,7 @@ class AdminUserController extends Controller
                 return response()->json([
                     'status' => 'success',
                     'message' => 'User fetched successfully',
-                    'user' => new AdminUserResource($user),
+                    'data ' => new AdminUserResource($user),
                 ], 200);
             } catch (\Exception $e) {                
                 return response()->json([

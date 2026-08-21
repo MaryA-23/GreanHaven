@@ -232,7 +232,8 @@ class AdminController extends Controller
 
                 return response()->json([
                     'status' => 'success',
-                    'admin' => $admin
+                    'message' => 'Admin profile fetched successfully', 
+                    'data' => $admin
                 ]);
 
             } catch (\Exception $e) {
