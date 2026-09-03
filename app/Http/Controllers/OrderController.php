@@ -66,27 +66,8 @@ class OrderController extends Controller
      * Stock is checked but NOT deducted here.
      * Stock deduction happens only after successful payment callback.
      */
-   public function store(Request $request, InventoryService $inventoryService): JsonResponse
+    public function store(Request $request, InventoryService $inventoryService): JsonResponse
     {
-        if (! $request->user()->hasVerifiedEmail()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Please verify your email before placing an order.'
-            ], 403);
-        }
-        if ($request->user()->role !== 'user') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only users can create orders.',
-            ], 403);
-        }
-        
-        $validated = $request->validate([
-            'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|exists:products,id',
-            'items.*.quantity' => 'required|integer|min:1',
-        ]);
-
         $user = $request->user();
 
         if (! $user->hasVerifiedEmail()) {
@@ -95,6 +76,23 @@ class OrderController extends Controller
                 'message' => 'Please verify your email before placing an order.'
             ], 403);
         }
+
+        if ($user->role !== 'user') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only users can create orders.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.quantity' => 'required|integer|min:1',
+
+            'delivery_address' => 'required|string|max:255',
+            'city' => 'required|string|max:100',
+            'notes' => 'nullable|string|max:1000',
+        ]);
 
         $existingOrder = Order::where('user_id', $user->id)
             ->where('status', 'pending_payment')
@@ -108,22 +106,28 @@ class OrderController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'You already have a pending unpaid order. Please complete payment or wait for it to expire.',
-                'data' => $existingOrder->load(['items.product', 'payment']),
+                'data' => $existingOrder->load([
+                    'items.product',
+                    'payment'
+                ]),
             ], 409);
         }
 
         $mergedItems = [];
 
         foreach ($validated['items'] as $item) {
+
             $productId = $item['product_id'];
             $quantity = (int) $item['quantity'];
 
-            $mergedItems[$productId] = ($mergedItems[$productId] ?? 0) + $quantity;
+            $mergedItems[$productId] =
+                ($mergedItems[$productId] ?? 0) + $quantity;
         }
 
         DB::beginTransaction();
 
         try {
+
             $total = 0;
 
             $order = Order::create([
@@ -131,25 +135,35 @@ class OrderController extends Controller
                 'company_id' => $user->company_id ?? null,
                 'status' => 'pending_payment',
                 'total_price' => 0,
+
+                'delivery_address' => $validated['delivery_address'],
+                'city' => $validated['city'],
+                'notes' => $validated['notes'] ?? null,
             ]);
 
             foreach ($mergedItems as $productId => $quantity) {
-            $product = Product::where('id', $productId)
-                ->lockForUpdate()
-                ->firstOrFail();
 
-            $inventoryService->syncStatus($product);
-            $product->save();
+                $product = Product::where('id', $productId)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            $inventoryService->checkStock($product, $quantity);
+                $inventoryService->syncStatus($product);
 
-            $subtotal = $product->price * $quantity;
+                $product->save();
 
-            $order->items()->create([
-                'product_id' => $product->id,
-                'quantity' => $quantity,
-                'price' => $product->price,
-                'subtotal' => $subtotal,
+                $inventoryService->checkStock(
+                    $product,
+                    $quantity
+                );
+
+                $subtotal =
+                    $product->price * $quantity;
+
+                $order->items()->create([
+                    'product_id' => $product->id,
+                    'quantity' => $quantity,
+                    'price' => $product->price,
+                    'subtotal' => $subtotal,
                 ]);
 
                 $total += $subtotal;
@@ -159,7 +173,7 @@ class OrderController extends Controller
                 'total_price' => $total,
             ]);
 
-            $payment = Payment::create([
+            Payment::create([
                 'order_id' => $order->id,
                 'user_id' => $user->id,
                 'amount' => $total,
@@ -173,41 +187,50 @@ class OrderController extends Controller
 
             DB::commit();
 
-        try {
-            Mail::to($order->user->email)->send(
-                new OrderCreatedMail(
-                    $order->fresh(['items.product', 'payment', 'user']),
-                    $order->user
-                )
-            );
-        } catch (\Exception $mailException) {
-            Log::error('Order confirmation email failed', [
-                'message' => $mailException->getMessage(),
-                'order_id' => $order->id,
-            ]);
-        }
+            try {
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Order created successfully. Payment is pending.',
-            'data' => $order->fresh(['items.product', 'payment']),
-        ], 201);
+                Mail::to($user->email)->send(
+                    new OrderCreatedMail(
+                        $order->fresh([
+                            'items.product',
+                            'payment',
+                            'user'
+                        ]),
+                        $user
+                    )
+                );
 
-            $order = $order->fresh(['items.product', 'payment', 'user']);
+            } catch (\Exception $mailException) {
+
+                Log::error(
+                    'Order confirmation email failed',
+                    [
+                        'message' => $mailException->getMessage(),
+                        'order_id' => $order->id,
+                    ]
+                );
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Order created successfully. Payment is pending.',
-                'data' => $order,
+                'data' => $order->fresh([
+                    'items.product',
+                    'payment'
+                ]),
             ], 201);
 
         } catch (\Exception $e) {
+
             DB::rollBack();
 
-            Log::error('Order creation failed', [
-                'message' => $e->getMessage(),
-                'user_id' => $user->id,
-            ]);
+            Log::error(
+                'Order creation failed',
+                [
+                    'message' => $e->getMessage(),
+                    'user_id' => $user->id,
+                ]
+            );
 
             return response()->json([
                 'success' => false,

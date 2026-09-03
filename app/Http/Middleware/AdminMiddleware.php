@@ -8,11 +8,6 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AdminMiddleware
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     */
     public function handle(Request $request, Closure $next): Response
     {
         $admin = $request->user();
@@ -23,13 +18,11 @@ class AdminMiddleware
             ], 401);
         }
 
-
-        if ($admin->role !== 'super_admin') {
+        if ($admin->role !== 'admin') {
             return response()->json([
-                'error' => 'Unauthorized. Only super admins can perform this action.'
+                'error' => 'Unauthorized. Only admins can perform this action.'
             ], 403);
         }
-
 
         return $next($request);
     }
