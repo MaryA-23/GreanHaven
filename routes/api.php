@@ -160,28 +160,23 @@ Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__
 //         'message' => 'Verification link sent.'
 //     ], 200);
 // })->middleware('throttle:6,1')->name('verification.send');
-
-Route::group(['prefix'=>'admin'], function(){
-    //Tip:: login as an admin
-    Route::post('login',[AdminController::class,'login']);
-
-    // Route::middleware(['super.admin'])->group(function(){
-
-    //     //Tip:: Allowing super-admins to create account for new admins or super-admins
-    //     Route::post('register',[AdminController::class,'addnewuser']);
-    // });
-
-    Route::post('register',[AdminController::class,'addnewuser']);
-
-    //changing of Admins roles
-    Route::post('change_admin_role',[AdminController::class,'changerole']);
-    Route::get('profile/{uuid}', [AdminController::class,'profile']);
-});
-
+// Admin routes
 Route::prefix('admin')->group(function () {
 
-    Route::post('/users', [AdminUserController::class, 'index']);
-    Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
-    
+    // Public admin route
+    Route::post('/login', [AdminController::class, 'login']);
 
+    // Protected admin routes
+    Route::middleware('auth:sanctum')->group(function () {
+
+        Route::get('/dashboard', [DashboardController::class, 'index']);
+
+        Route::get('/profile/{uuid}', [AdminController::class, 'profile']);
+
+        Route::post('/users', [AdminUserController::class, 'index']);
+        Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
+
+        Route::post('/register', [AdminController::class, 'addnewuser']);
+        Route::post('/change_admin_role', [AdminController::class, 'changerole']);
+    });
 });
