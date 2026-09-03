@@ -18,55 +18,57 @@ use Illuminate\Support\Facades\Hash;
 class AdminController extends Controller
 {
     //allowing Admins Login
-    public function login(){
-        try{
-            $rules=[
-                'email'     =>'required|email',
-                'password'  =>'required|string|min:8'
-            ];
+    public function login(Request $request)
+    {
+        try {
+            $validation = Validator::make($request->all(), [
+                'email' => 'required|email',
+                'password' => 'required|string|min:8',
+            ]);
 
-            $validation=Validator::make(request()->all(),$rules);
-
-            if($validation->fails()){
+            if ($validation->fails()) {
                 return response()->json([
-                    'status'    =>'failed',
-                    'message'   =>$validation->errors()->first()
-                ],422);
+                    'status' => 'failed',
+                    'message' => $validation->errors()->first(),
+                ], 422);
             }
 
-            $admin = Admin::query()->where('email',request()->email)->first();
+            $admin = Admin::where('email', $request->email)->first();
 
-            if(!$admin){
+            if (!$admin || !Hash::check($request->password, $admin->password)) {
                 return response()->json([
-                    'status'    =>'failed',
-                    'message'   =>'Admin is not found'
-                ],404);
+                    'status' => 'failed',
+                    'message' => 'Invalid email or password',
+                ], 401);
             }
 
-            if(password_verify(request()->password,$admin->password)){
-
-                // $access_token=$admin->createToken('Admin_login_access_token')->accessToken;
-
+            if ($admin->status === 'inactive') {
                 return response()->json([
-                    'status'        =>'success',
-                    'message'       =>'login successful',
-                    // 'access_token'  =>$access_token,
-                    'admin_details' =>$admin
-            ],200);
-            }else{
-                return response()->json([
-                    'status'    =>'failed',
-                    'message'   =>'wrong credentials'
-                ],403);
+                    'status' => 'failed',
+                    'message' => 'Your admin account is inactive',
+                ], 403);
             }
 
-        }catch(\Exception $e){
+            // Remove old admin tokens
+            $admin->tokens()->delete();
+
+            // Create Sanctum token
+            $token = $admin->createToken('admin-token')->plainTextToken;
+
             return response()->json([
-                'status'    =>'failed',
-                'message'   =>$e->getMessage()
-            ],500);
-        }
+                'status' => 'success',
+                'message' => 'Login successful',
+                'access_token' => $token,
+                'token_type' => 'Bearer',
+                'admin' => $admin,
+            ], 200);
 
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     //permitting super admin to add other admins
