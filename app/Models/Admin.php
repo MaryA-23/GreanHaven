@@ -3,18 +3,17 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Auth;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Foundation\Auth\User as Authenticable;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 
-class Admin extends Authenticable   
+class Admin extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes, HasApiTokens;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
-// protected $connection = 'system';
+    // We will configure this when we set up tenancy properly.
+    // protected $connection = 'system';
 
     protected $fillable = [
         'uuid',
@@ -27,8 +26,8 @@ class Admin extends Authenticable
         'status',
         'role',
         'permissions',
-        'profile_picture',  
-    ];  
+        'profile_picture',
+    ];
 
     protected $hidden = [
         'password',
@@ -38,7 +37,6 @@ class Admin extends Authenticable
     protected $casts = [
         'email_verified_at' => 'datetime',
         'permissions' => 'array',
+        'password' => 'hashed',
     ];
-    
-
 }

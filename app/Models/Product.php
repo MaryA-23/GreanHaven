@@ -18,6 +18,7 @@ class Product extends Model
         'description',
         'unit',
         'is_available',
+        'low_stock_threshold',
    
     ];
 
