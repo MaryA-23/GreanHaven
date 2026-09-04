@@ -30,7 +30,11 @@ class ProductResource extends JsonResource
             'description' => $this->description,
             'unit' => $this->unit,
             'is_available' => $this->is_available,
+            'image' => $this->image,
+            'image_url' => $this->image
+                ? asset('storage/' . $this->image)
+                : null,
 
-        ];
+                    ];
     }
 }

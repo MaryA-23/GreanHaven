@@ -9,6 +9,7 @@ use App\Http\Resources\ProductResource;
 use App\Events\ProductReady;
 use Illuminate\Support\Facades\Log;
 use App\Services\InventoryService;
+use Illuminate\Support\Facades\Storage;
 
 class ProductController extends Controller
 {
@@ -91,7 +92,17 @@ class ProductController extends Controller
             'is_available' => 'nullable|boolean',
             'status' => 'sometimes|in:active,inactive,low_stock,out_of_stock',
             'low_stock_threshold' => 'nullable|integer|min:0',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
+
+        $imagePath = null;
+
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store(
+                'products',
+                'public'
+            );
+        }
 
         // CHECK IF PRODUCT ALREADY EXISTS
         $existingProduct = Product::where('name', $validated['name'])
@@ -104,6 +115,20 @@ class ProductController extends Controller
             $existingProduct->price = $validated['price'];
             $existingProduct->description = $validated['description'] ?? $existingProduct->description;
             $existingProduct->unit = $validated['unit'] ?? $existingProduct->unit;
+
+            if ($imagePath) {
+
+            if (
+                $existingProduct->image &&
+                Storage::disk('public')->exists($existingProduct->image)
+            ) {
+                Storage::disk('public')->delete(
+                    $existingProduct->image
+                );
+            }
+
+            $existingProduct->image = $imagePath;
+        }
 
             if (array_key_exists('low_stock_threshold', $validated)) {
                 $existingProduct->low_stock_threshold = $validated['low_stock_threshold'];
@@ -127,6 +152,7 @@ class ProductController extends Controller
             'quantity' => $validated['quantity'],
             'category_id' => $validated['category_id'],
             'description' => $validated['description'] ?? null,
+            'image' => $imagePath,
             'unit' => $validated['unit'],
             'is_available' => $validated['is_available'] ?? true,
             'status' => $validated['status'] ?? 'active',
@@ -182,12 +208,32 @@ class ProductController extends Controller
             'quantity' => 'sometimes|integer|min:0',
             'category_id' => 'sometimes|exists:categories,id',
             'description' => 'nullable|string',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
             'unit' => 'sometimes|string|max:50',
             'is_available' => 'sometimes|boolean',
             'supplier' => 'nullable|string|max:255',
             'status' => 'sometimes|in:active,inactive,out_of_stock,low_stock',
+            'low_stock_threshold' => 'nullable|integer|min:0',
         ]);
 
+        if ($request->hasFile('image')) {
+
+            if (
+                $product->image &&
+                Storage::disk('public')->exists($product->image)
+            ) {
+                Storage::disk('public')->delete(
+                    $product->image
+                );
+            }
+
+            $validated['image'] =
+                $request->file('image')->store(
+                    'products',
+                    'public'
+                );
+        }
+        
         $oldStatus = $product->status;
 
              $product->update($validated);

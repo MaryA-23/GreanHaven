@@ -16,6 +16,7 @@ class Product extends Model
         'quantity',
         'category_id',
         'description',
+        'image',
         'unit',
         'is_available',
         'low_stock_threshold',
