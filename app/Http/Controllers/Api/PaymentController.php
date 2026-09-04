@@ -450,31 +450,13 @@ class PaymentController extends Controller
                         );
                     }
 
-                    return response()->json([
-                        'success' => true,
-                        'message' =>
-                            'Payment verified successfully.',
-
-                        'paystack_status' =>
-                            $data['status'],
-
-                        'order_status' =>
-                            'paid',
-
-                        'payment_status' =>
-                            'paid',
-
-                        'reference' =>
-                            $reference,
-
-                        'order' =>
-                            $order->fresh([
-                                'items.product',
-                                'payment'
-                            ])
-                    ], 200);
-
-                } catch (\Exception $e) {
+                   return redirect(
+                        'http://localhost:4200/order-success?order_id='
+                        . $order->id
+                        . '&reference='
+                        . urlencode($reference)
+                    );
+                    } catch (\Exception $e) {
 
                     DB::rollBack();
 
