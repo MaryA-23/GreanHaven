@@ -351,15 +351,19 @@ class PaymentController extends Controller
 
                     // Make sure amount paid matches order/payment
                     if (
-                        round((float) $paidAmount, 2) !==
-                        round((float) $payment->amount, 2)
-                    ) {
-                        DB::rollBack();
+                            round((float) $paidAmount, 2) !==
+                            round((float) $payment->amount, 2)
+                        ) {
+                            DB::rollBack();
 
-                        return response()->json([
-                            'error' => 'Payment amount mismatch'
-                        ], 400);
-                    }
+                            return response()->json([
+                                'error' => 'Payment amount mismatch',
+                                'paystack_amount' => $paidAmount,
+                                'greenhaven_amount' => $payment->amount,
+                                'paystack_raw_amount' => $data['amount'] ?? null,
+                                'reference' => $reference
+                            ], 400);
+                        }
 
                     /*
                     * Deduct stock only after Paystack
@@ -670,20 +674,10 @@ class PaymentController extends Controller
                 return response()->json(['message' => 'Payment expired'], 200);
             }
 
-             if (
-                    round((float) $paidAmount, 2) !==
-                    round((float) $payment->amount, 2)
-                ) {
-                    DB::rollBack();
-
-                    return response()->json([
-                        'error' => 'Payment amount mismatch',
-                        'paystack_amount' => $paidAmount,
-                        'greenhaven_amount' => $payment->amount,
-                        'paystack_raw_amount' => $data['amount'] ?? null,
-                        'reference' => $reference
-                    ], 400);
-                }
+            if (round((float) $paidAmount, 2) !== round((float) $payment->amount, 2)) {
+                DB::rollBack();
+                return response()->json(['message' => 'Amount mismatch'], 400);
+            }
 
             foreach ($order->items as $item) {
                 $product = Product::where('id', $item->product_id)
