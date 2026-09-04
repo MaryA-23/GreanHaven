@@ -72,7 +72,7 @@ Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
     Route::middleware('role:user')->group(function () {
         Route::post('/', [OrderController::class, 'store']);
         Route::get('/my', [OrderController::class, 'index']);
-        Route::get('/{id}', [OrderController::class, 'show']);
+        Route::get('/my/{id}', [OrderController::class, 'show']);
         Route::patch('/{id}/cancel', [OrderController::class, 'cancel']);
     });
 
