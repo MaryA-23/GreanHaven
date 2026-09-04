@@ -243,21 +243,34 @@ class OrderController extends Controller
     /**
      * Show single order depending on role.
      */
-    public function show(Request $request, int $id): JsonResponse
+    public function show( Request $request,int $id): JsonResponse
     {
         $user = $request->user();
 
-        $order = Order::with(['items.product', 'payment', 'user', 'company'])
-            ->findOrFail($id);
+        $order = Order::with([
+            'items.product',
+            'payment',
+            'user',
+            'company'
+        ])->findOrFail($id);
 
-        if ($user->role === 'user' && $order->user_id !== $user->id) {
+        // CUSTOMER
+        if (
+            $user->role === 'user' &&
+            (int) $order->user_id !== (int) $user->id
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized.',
             ], 403);
         }
 
-        if ($user->role === 'company' && $order->company_id !== $user->company_id) {
+        // COMPANY
+        if (
+            $user->role === 'company' &&
+            (int) $order->company_id !==
+            (int) $user->company_id
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized.',
