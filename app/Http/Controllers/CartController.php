@@ -11,11 +11,6 @@ use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
 {
-    /*
-    |--------------------------------------------------------------------------
-    | Add item to cart
-    |--------------------------------------------------------------------------
-    */
     public function add(Request $request)
     {
         $request->validate([
@@ -60,11 +55,6 @@ class CartController extends Controller
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Get cart
-    |--------------------------------------------------------------------------
-    */
     public function index()
     {
         $user = auth()->user();
@@ -77,7 +67,8 @@ class CartController extends Controller
         ) {
             return response()->json([
                 'message' => 'Cart is empty',
-                'cart' => []
+                'cart' => [],
+                'total' => 0
             ], 200);
         }
 
@@ -85,7 +76,8 @@ class CartController extends Controller
 
         $total = $cart->items->sum(
             function ($item) {
-                return $item->price *
+                return
+                    $item->price *
                     $item->quantity;
             }
         );
@@ -97,11 +89,6 @@ class CartController extends Controller
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Update cart item quantity
-    |--------------------------------------------------------------------------
-    */
     public function update(
         Request $request,
         $id
@@ -113,9 +100,10 @@ class CartController extends Controller
         $cart = auth()->user()->cart;
 
         if (!$cart) {
+
             return response()->json([
                 'message' => 'Cart is empty'
-            ], 200);
+            ], 404);
         }
 
         $item = $cart->items()
@@ -125,26 +113,36 @@ class CartController extends Controller
             'quantity' => $request->quantity
         ]);
 
+        $cart->load('items.product');
+
+        $total = $cart->items->sum(
+            function ($item) {
+                return
+                    $item->price *
+                    $item->quantity;
+            }
+        );
+
         return response()->json([
-            'message' => 'Cart item updated successfully',
-            'cart' => $cart->load('items.product')
+            'message' =>
+                'Cart item updated successfully',
+
+            'cart' => $cart,
+
+            'total' => $total
         ], 200);
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Remove item from cart
-    |--------------------------------------------------------------------------
-    */
     public function remove($id)
     {
         $cart = auth()->user()->cart;
 
         if (!$cart) {
+
             return response()->json([
                 'message' => 'Cart is empty'
-            ], 200);
+            ], 404);
         }
 
         $item = $cart->items()
@@ -152,26 +150,33 @@ class CartController extends Controller
 
         $item->delete();
 
+        $cart->load('items.product');
+
+        $total = $cart->items->sum(
+            function ($item) {
+                return
+                    $item->price *
+                    $item->quantity;
+            }
+        );
+
         return response()->json([
-            'message' => 'Item removed from cart successfully',
-            'cart' => $cart->load('items.product')
+            'message' =>
+                'Item removed from cart successfully',
+
+            'cart' => $cart,
+
+            'total' => $total
         ], 200);
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Clear cart
-    |--------------------------------------------------------------------------
-    */
     public function clear()
     {
         $cart = auth()->user()->cart;
 
-        if (
-            !$cart ||
-            $cart->items()->count() === 0
-        ) {
+        if (!$cart) {
+
             return response()->json([
                 'message' => 'Cart is already empty'
             ], 200);
@@ -180,22 +185,19 @@ class CartController extends Controller
         $cart->items()->delete();
 
         return response()->json([
-            'message' => 'Cart cleared successfully'
+            'message' => 'Cart cleared successfully',
+            'cart' => [],
+            'total' => 0
         ], 200);
     }
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Checkout
-    |--------------------------------------------------------------------------
-    */
     public function checkout()
     {
         $user = auth()->user();
 
         /*
-         * User must verify email first.
+         * Email must be verified.
          */
         if (!$user->hasVerifiedEmail()) {
 
@@ -207,20 +209,18 @@ class CartController extends Controller
 
 
         /*
-         * Load backend cart.
+         * Load cart.
          */
         $cart = $user->cart()
             ->with('items.product')
             ->first();
 
 
-        /*
-         * Make sure cart is not empty.
-         */
         if (
             !$cart ||
             $cart->items->isEmpty()
         ) {
+
             return response()->json([
                 'message' => 'Cart is empty'
             ], 400);
@@ -281,28 +281,22 @@ class CartController extends Controller
 
             /*
              * Create payment record.
-             *
-             * Paystack initialize() expects
-             * this payment record to exist.
              */
             $payment = Payment::create([
                 'order_id' => $order->id,
                 'user_id' => $user->id,
                 'amount' => $total,
-                'status' => 'pending',
+                'status' => 'unpaid',
                 'payment_method' => 'paystack',
             ]);
 
 
             /*
-             * IMPORTANT:
+             * Order now exists.
              *
-             * DO NOT clear the cart here.
-             *
-             * The PaymentController callback
-             * will clear it only after Paystack
-             * confirms successful payment.
+             * Move items out of cart.
              */
+            $cart->items()->delete();
 
 
             DB::commit();
@@ -310,11 +304,12 @@ class CartController extends Controller
 
             return response()->json([
                 'message' =>
-                    'Checkout successful, order created',
+                    'Checkout successful',
 
                 'order' =>
                     $order->load(
-                        'items.product'
+                        'items.product',
+                        'payment'
                     ),
 
                 'payment' =>
@@ -325,7 +320,6 @@ class CartController extends Controller
         } catch (\Exception $e) {
 
             DB::rollBack();
-
 
             return response()->json([
                 'message' => 'Checkout failed',
