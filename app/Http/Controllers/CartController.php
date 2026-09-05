@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Cart;
 use App\Models\Product;
 use App\Models\Order;
+use App\Models\Payment;
 use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
@@ -194,8 +195,7 @@ class CartController extends Controller
         $user = auth()->user();
 
         /*
-         * Customer must verify email
-         * before creating an order.
+         * User must verify email first.
          */
         if (!$user->hasVerifiedEmail()) {
 
@@ -207,7 +207,7 @@ class CartController extends Controller
 
 
         /*
-         * Load the customer's backend cart.
+         * Load backend cart.
          */
         $cart = $user->cart()
             ->with('items.product')
@@ -215,7 +215,7 @@ class CartController extends Controller
 
 
         /*
-         * Make sure cart contains items.
+         * Make sure cart is not empty.
          */
         if (
             !$cart ||
@@ -223,7 +223,7 @@ class CartController extends Controller
         ) {
             return response()->json([
                 'message' => 'Cart is empty'
-            ], 200);
+            ], 400);
         }
 
 
@@ -232,7 +232,7 @@ class CartController extends Controller
         try {
 
             /*
-             * Calculate order total.
+             * Calculate total.
              */
             $total = 0;
 
@@ -246,11 +246,6 @@ class CartController extends Controller
 
             /*
              * Create order.
-             *
-             * IMPORTANT:
-             * pending_payment is the correct
-             * database status before Paystack
-             * payment is completed.
              */
             $order = Order::create([
                 'user_id' => $user->id,
@@ -260,42 +255,70 @@ class CartController extends Controller
 
 
             /*
-             * Copy cart items into order items.
+             * Create order items.
              */
-             foreach ($cart->items as $item) {
+            foreach ($cart->items as $item) {
 
                 $subtotal =
                     $item->price *
                     $item->quantity;
 
                 $order->items()->create([
-                    'product_id' => $item->product_id,
-                    'quantity' => $item->quantity,
-                    'price' => $item->price,
-                    'subtotal' => $subtotal,
+                    'product_id' =>
+                        $item->product_id,
+
+                    'quantity' =>
+                        $item->quantity,
+
+                    'price' =>
+                        $item->price,
+
+                    'subtotal' =>
+                        $subtotal,
                 ]);
             }
 
 
             /*
-             * Clear the cart after the
-             * order has been created.
+             * Create payment record.
+             *
+             * Paystack initialize() expects
+             * this payment record to exist.
              */
-            $cart->items()->delete();
+            $payment = Payment::create([
+                'order_id' => $order->id,
+                'user_id' => $user->id,
+                'amount' => $total,
+                'status' => 'pending',
+                'payment_method' => 'paystack',
+            ]);
+
+
+            /*
+             * IMPORTANT:
+             *
+             * DO NOT clear the cart here.
+             *
+             * The PaymentController callback
+             * will clear it only after Paystack
+             * confirms successful payment.
+             */
 
 
             DB::commit();
 
 
-            /*
-             * Return the new order to Angular.
-             */
             return response()->json([
                 'message' =>
                     'Checkout successful, order created',
 
                 'order' =>
-                    $order->load('items.product')
+                    $order->load(
+                        'items.product'
+                    ),
+
+                'payment' =>
+                    $payment
             ], 201);
 
 
