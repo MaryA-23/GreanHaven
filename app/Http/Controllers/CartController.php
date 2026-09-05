@@ -10,6 +10,11 @@ use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
 {
+    /*
+    |--------------------------------------------------------------------------
+    | Add item to cart
+    |--------------------------------------------------------------------------
+    */
     public function add(Request $request)
     {
         $request->validate([
@@ -23,13 +28,23 @@ class CartController extends Controller
             'user_id' => $user->id
         ]);
 
-        $product = Product::findOrFail($request->product_id);
+        $product = Product::findOrFail(
+            $request->product_id
+        );
 
-        $item = $cart->items()->where('product_id', $product->id)->first();
+        $item = $cart->items()
+            ->where('product_id', $product->id)
+            ->first();
 
         if ($item) {
-            $item->increment('quantity', $request->quantity);
+
+            $item->increment(
+                'quantity',
+                $request->quantity
+            );
+
         } else {
+
             $cart->items()->create([
                 'product_id' => $product->id,
                 'quantity' => $request->quantity,
@@ -43,12 +58,22 @@ class CartController extends Controller
         ], 200);
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Get cart
+    |--------------------------------------------------------------------------
+    */
     public function index()
     {
         $user = auth()->user();
+
         $cart = $user->cart;
 
-        if (!$cart || $cart->items()->count() === 0) {
+        if (
+            !$cart ||
+            $cart->items()->count() === 0
+        ) {
             return response()->json([
                 'message' => 'Cart is empty',
                 'cart' => []
@@ -57,9 +82,12 @@ class CartController extends Controller
 
         $cart->load('items.product');
 
-        $total = $cart->items->sum(function ($item) {
-            return $item->price * $item->quantity;
-        });
+        $total = $cart->items->sum(
+            function ($item) {
+                return $item->price *
+                    $item->quantity;
+            }
+        );
 
         return response()->json([
             'cart' => $cart,
@@ -67,8 +95,16 @@ class CartController extends Controller
         ], 200);
     }
 
-    public function update(Request $request, $id)
-    {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Update cart item quantity
+    |--------------------------------------------------------------------------
+    */
+    public function update(
+        Request $request,
+        $id
+    ) {
         $request->validate([
             'quantity' => 'required|integer|min:1',
         ]);
@@ -81,7 +117,8 @@ class CartController extends Controller
             ], 200);
         }
 
-        $item = $cart->items()->findOrFail($id);
+        $item = $cart->items()
+            ->findOrFail($id);
 
         $item->update([
             'quantity' => $request->quantity
@@ -93,6 +130,12 @@ class CartController extends Controller
         ], 200);
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Remove item from cart
+    |--------------------------------------------------------------------------
+    */
     public function remove($id)
     {
         $cart = auth()->user()->cart;
@@ -103,7 +146,9 @@ class CartController extends Controller
             ], 200);
         }
 
-        $item = $cart->items()->findOrFail($id);
+        $item = $cart->items()
+            ->findOrFail($id);
+
         $item->delete();
 
         return response()->json([
@@ -112,11 +157,20 @@ class CartController extends Controller
         ], 200);
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Clear cart
+    |--------------------------------------------------------------------------
+    */
     public function clear()
     {
         $cart = auth()->user()->cart;
 
-        if (!$cart || $cart->items()->count() === 0) {
+        if (
+            !$cart ||
+            $cart->items()->count() === 0
+        ) {
             return response()->json([
                 'message' => 'Cart is already empty'
             ], 200);
@@ -129,58 +183,126 @@ class CartController extends Controller
         ], 200);
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | Checkout
+    |--------------------------------------------------------------------------
+    */
     public function checkout()
     {
         $user = auth()->user();
 
+        /*
+         * Customer must verify email
+         * before creating an order.
+         */
         if (!$user->hasVerifiedEmail()) {
+
             return response()->json([
-                'message' => 'Please verify your email before checkout'
+                'message' =>
+                    'Please verify your email before checkout'
             ], 403);
         }
 
-        $cart = $user->cart()->with('items.product')->first();
 
-        if (!$cart || $cart->items->isEmpty()) {
+        /*
+         * Load the customer's backend cart.
+         */
+        $cart = $user->cart()
+            ->with('items.product')
+            ->first();
+
+
+        /*
+         * Make sure cart contains items.
+         */
+        if (
+            !$cart ||
+            $cart->items->isEmpty()
+        ) {
             return response()->json([
                 'message' => 'Cart is empty'
             ], 200);
         }
 
+
         DB::beginTransaction();
 
         try {
+
+            /*
+             * Calculate order total.
+             */
             $total = 0;
 
             foreach ($cart->items as $item) {
-                $total += $item->price * $item->quantity;
+
+                $total +=
+                    $item->price *
+                    $item->quantity;
             }
 
+
+            /*
+             * Create order.
+             *
+             * IMPORTANT:
+             * pending_payment is the correct
+             * database status before Paystack
+             * payment is completed.
+             */
             $order = Order::create([
                 'user_id' => $user->id,
-                'status' => 'pending',
+                'status' => 'pending_payment',
                 'total_amount' => $total,
             ]);
 
+
+            /*
+             * Copy cart items into order items.
+             */
             foreach ($cart->items as $item) {
+
                 $order->items()->create([
-                    'product_id' => $item->product_id,
-                    'quantity' => $item->quantity,
-                    'price' => $item->price,
+                    'product_id' =>
+                        $item->product_id,
+
+                    'quantity' =>
+                        $item->quantity,
+
+                    'price' =>
+                        $item->price,
                 ]);
             }
 
+
+            /*
+             * Clear the cart after the
+             * order has been created.
+             */
             $cart->items()->delete();
+
 
             DB::commit();
 
+
+            /*
+             * Return the new order to Angular.
+             */
             return response()->json([
-                'message' => 'Checkout successful, order created',
-                'order' => $order->load('items.product')
+                'message' =>
+                    'Checkout successful, order created',
+
+                'order' =>
+                    $order->load('items.product')
             ], 201);
 
+
         } catch (\Exception $e) {
+
             DB::rollBack();
+
 
             return response()->json([
                 'message' => 'Checkout failed',
