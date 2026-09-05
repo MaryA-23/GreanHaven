@@ -192,9 +192,17 @@ class CartController extends Controller
     }
 
 
-    public function checkout()
+    public function checkout(Request $request)
     {
+
+        $request->validate([
+            'delivery_address' => 'required|string|max:255',
+            'city' => 'required|string|max:100',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
         $user = auth()->user();
+        
 
         /*
          * Email must be verified.
@@ -247,11 +255,20 @@ class CartController extends Controller
             /*
              * Create order.
              */
-            $order = Order::create([
-                'user_id' => $user->id,
-                'status' => 'pending_payment',
-                'total_amount' => $total,
-            ]);
+           $order = Order::create([
+            'user_id' => $user->id,
+            'status' => 'pending_payment',
+            'total_amount' => $total,
+
+            'delivery_address' =>
+                $request->delivery_address,
+
+            'city' =>
+                $request->city,
+
+            'notes' =>
+                $request->notes,
+        ]);
 
 
             /*
