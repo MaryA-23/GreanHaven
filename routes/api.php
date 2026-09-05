@@ -50,6 +50,11 @@ Route::prefix('tenant')->group(function () {
         [TenantAuthController::class, 'register']
     );
 
+    Route::post(
+        '/login',
+        [TenantAuthController::class, 'login']
+    );
+
 });
 
 Route::prefix('products')->group(function () {

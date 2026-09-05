@@ -114,4 +114,65 @@ class TenantAuthController extends Controller
         ], 500);
         }
     }
+
+        public function login(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        $user = User::where('email', $request->email)
+            ->first();
+
+        if (
+            ! $user ||
+            ! Hash::check(
+                $request->password,
+                $user->password
+            )
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials.',
+            ], 401);
+        }
+
+
+        if ($user->role !== 'company') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This account is not a tenant account.',
+            ], 403);
+        }
+
+
+        if (! $user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' =>
+                    'Please verify your email address before logging in.',
+            ], 403);
+        }
+
+
+        $user->update([
+            'last_login' => now(),
+        ]);
+
+
+        $token =
+            $user->createToken(
+                'tenant_auth_token'
+            )->plainTextToken;
+
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Tenant login successful.',
+            'user' => $user->load('company'),
+            'token' => $token,
+        ], 200);
+    }
+
 }
