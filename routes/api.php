@@ -13,6 +13,7 @@ use App\Http\Controllers\Auth\PublicVerifyEmailController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Api\TenantAuthController;
 
 
 
@@ -40,6 +41,15 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
   Route::get('/user', [AuthController::class, 'user']);
   // Example: farming-related routes
   // Route::apiResource('farms', FarmController::class);
+});
+
+Route::prefix('tenant')->group(function () {
+
+    Route::post(
+        '/register',
+        [TenantAuthController::class, 'register']
+    );
+
 });
 
 Route::prefix('products')->group(function () {
