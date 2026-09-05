@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Category;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
 {
@@ -122,79 +123,62 @@ class CategoryController extends Controller
     /*
      * Update category.
      */
-    public function update(
-        Request $request,
-        $id
-    ) {
-
+    public function update(Request $request, $id)
+    {
         $category = Category::find($id);
 
-
         if (!$category) {
-
             return response()->json([
-                'message' =>
-                    'Category not found'
+                'message' => 'Category not found'
             ], 404);
-
         }
 
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('categories', 'name')
+                    ->ignore($category->id),
+            ],
 
-        $request->validate([
-            'name' => 'required|string|max:255|unique:categories,name,' . $id,
-            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:10240',
+            'image' => [
+                'nullable',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:10240',
+            ],
         ]);
 
-
-        $category->name =
-            $request->name;
-
+        $category->name = $validated['name'];
 
         if ($request->hasFile('image')) {
 
+            // Delete old category image
             if (
                 $category->image &&
                 Storage::disk('public')
                     ->exists($category->image)
             ) {
-
                 Storage::disk('public')
-                    ->delete(
-                        $category->image
-                    );
-
+                    ->delete($category->image);
             }
 
-
-            $category->image =
-                $request
-                    ->file('image')
-                    ->store(
-                        'categories',
-                        'public'
-                    );
-
+            // Upload new category image
+            $category->image = $request
+                ->file('image')
+                ->store('categories', 'public');
         }
-
 
         $category->save();
 
-
-        $category->image_url =
-            $category->image
-                ? asset(
-                    'storage/' .
-                    $category->image
-                )
-                : null;
-
+        $category->image_url = $category->image
+            ? asset('storage/' . $category->image)
+            : null;
 
         return response()->json([
-            'message' =>
-                'Category updated successfully',
-
-            'category' =>
-                $category
+            'message' => 'Category updated successfully',
+            'category' => $category
         ]);
     }
 
