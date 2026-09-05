@@ -299,13 +299,13 @@ class CartController extends Controller
             /*
              * Create payment record.
              */
-            $payment = Payment::create([
-                'order_id' => $order->id,
-                'user_id' => $user->id,
-                'amount' => $total,
-                'status' => 'unpaid',
-                'payment_method' => 'paystack',
-            ]);
+           $payment = Payment::create([
+            'order_id' => $order->id,
+            'user_id' => $user->id,
+            'amount' => $total,
+            'status' => 'pending',
+            'payment_method' => 'paystack',
+        ]);
 
 
             /*
