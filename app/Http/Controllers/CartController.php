@@ -262,17 +262,17 @@ class CartController extends Controller
             /*
              * Copy cart items into order items.
              */
-            foreach ($cart->items as $item) {
+             foreach ($cart->items as $item) {
+
+                $subtotal =
+                    $item->price *
+                    $item->quantity;
 
                 $order->items()->create([
-                    'product_id' =>
-                        $item->product_id,
-
-                    'quantity' =>
-                        $item->quantity,
-
-                    'price' =>
-                        $item->price,
+                    'product_id' => $item->product_id,
+                    'quantity' => $item->quantity,
+                    'price' => $item->price,
+                    'subtotal' => $subtotal,
                 ]);
             }
 
