@@ -141,13 +141,8 @@ class CategoryController extends Controller
 
 
         $request->validate([
-            'name' =>
-                'required|string|unique:categories,name,' .
-                $id .
-                '|max:255',
-
-            'image' =>
-                'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
+            'name' => 'required|string|max:255|unique:categories,name,' . $id,
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:10240',
         ]);
 
 
