@@ -107,11 +107,11 @@ class TenantAuthController extends Controller
                 ]
             );
 
-            return response()->json([
-                'success' => false,
-                'message' =>
-                    'Tenant registration failed.',
-            ], 500);
+          return response()->json([
+            'success' => false,
+            'message' => 'Tenant registration failed.',
+            'error' => $e->getMessage(),
+        ], 500);
         }
     }
 }
