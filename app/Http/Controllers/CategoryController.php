@@ -123,6 +123,7 @@ class CategoryController extends Controller
     /*
      * Update category.
      */
+    
     public function update(Request $request, $id)
     {
         $category = Category::find($id);
@@ -135,7 +136,7 @@ class CategoryController extends Controller
 
         $validated = $request->validate([
             'name' => [
-                'required',
+                'sometimes',
                 'string',
                 'max:255',
                 Rule::unique('categories', 'name')
@@ -150,21 +151,23 @@ class CategoryController extends Controller
             ],
         ]);
 
-        $category->name = $validated['name'];
+        // Only change the name if a new name was sent
+        if ($request->filled('name')) {
+            $category->name = $validated['name'];
+        }
 
+        // Upload a new image if provided
         if ($request->hasFile('image')) {
 
-            // Delete old category image
+            // Delete the old image
             if (
                 $category->image &&
-                Storage::disk('public')
-                    ->exists($category->image)
+                Storage::disk('public')->exists($category->image)
             ) {
-                Storage::disk('public')
-                    ->delete($category->image);
+                Storage::disk('public')->delete($category->image);
             }
 
-            // Upload new category image
+            // Save the new image
             $category->image = $request
                 ->file('image')
                 ->store('categories', 'public');
@@ -181,7 +184,6 @@ class CategoryController extends Controller
             'category' => $category
         ]);
     }
-
 
     /*
      * Delete category.
