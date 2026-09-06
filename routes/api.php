@@ -14,7 +14,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Api\TenantAuthController;
-
+use App\Http\Controllers\Api\TenantDashboardController;
 
 
 
@@ -61,6 +61,19 @@ Route::prefix('tenant')->group(function () {
     );
 
 });
+Route::prefix('tenant')
+    ->middleware([
+        'auth:sanctum',
+        'role:company'
+    ])
+    ->group(function () {
+
+        Route::get(
+            '/dashboard/summary',
+            [TenantDashboardController::class, 'summary']
+        );
+
+    });
 
 Route::prefix('products')->group(function () {
 
