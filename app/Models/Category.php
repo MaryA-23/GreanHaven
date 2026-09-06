@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Company;
+use App\Models\Product;
 
 class Category extends Model
 {
@@ -19,4 +21,8 @@ class Category extends Model
     {
         return $this->hasMany(Product::class);
     }
+    public function company()
+{
+    return $this->belongsTo(Company::class);
+}
 }

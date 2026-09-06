@@ -98,6 +98,26 @@ use App\Http\Controllers\Api\TenantDashboardController;
                 [ProductController::class, 'updateTenantStock']
             );
 
+            Route::get(
+                '/categories',
+                [CategoryController::class, 'tenantIndex']
+            );
+
+            Route::post(
+                '/categories',
+                [CategoryController::class, 'tenantStore']
+            );
+
+            Route::put(
+                '/categories/{id}',
+                [CategoryController::class, 'tenantUpdate']
+            );
+
+            Route::delete(
+                '/categories/{id}',
+                [CategoryController::class, 'tenantDestroy']
+            );
+
         });
 
     Route::prefix('products')->group(function () {

@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use App\Models\Category;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Http\JsonResponse;
+
 
 class CategoryController extends Controller
 {
@@ -182,6 +184,144 @@ class CategoryController extends Controller
         return response()->json([
             'message' => 'Category updated successfully',
             'category' => $category
+        ]);
+    }
+
+    public function tenantIndex(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $categories = Category::where(
+            'company_id',
+            $user->company_id
+        )
+        ->latest()
+        ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $categories,
+        ]);
+    }
+
+    public function tenantStore(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'image' => 'nullable|string|max:255',
+        ]);
+
+        $exists = Category::where(
+            'company_id',
+            $user->company_id
+        )
+        ->where(
+            'name',
+            $validated['name']
+        )
+        ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This category already exists.',
+            ], 422);
+        }
+
+        $category = Category::create([
+            'company_id' => $user->company_id,
+            'name' => $validated['name'],
+            'image' => $validated['image'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Category added successfully.',
+            'data' => $category,
+        ], 201);
+    }
+
+    public function tenantUpdate(Request $request,int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $category = Category::where(
+            'company_id',
+            $user->company_id
+        )
+        ->findOrFail($id);
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'image' => 'nullable|string|max:255',
+        ]);
+
+        $duplicate = Category::where(
+            'company_id',
+            $user->company_id
+        )
+        ->where(
+            'name',
+            $validated['name']
+        )
+        ->where(
+            'id',
+            '!=',
+            $category->id
+        )
+        ->exists();
+
+        if ($duplicate) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This category already exists.',
+            ], 422);
+        }
+
+        $category->update([
+            'name' => $validated['name'],
+            'image' => $validated['image'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Category updated successfully.',
+            'data' => $category,
+        ]);
+    }
+
+    public function tenantDestroy(Request $request,int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $category = Category::where(
+            'company_id',
+            $user->company_id
+        )
+        ->findOrFail($id);
+
+        if (
+            $category->products()
+                ->where(
+                    'company_id',
+                    $user->company_id
+                )
+                ->exists()
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' =>
+                    'You cannot delete this category because products are using it.',
+            ], 422);
+        }
+
+        $category->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Category deleted successfully.',
         ]);
     }
 
