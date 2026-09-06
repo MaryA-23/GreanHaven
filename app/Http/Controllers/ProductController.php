@@ -343,4 +343,51 @@ class ProductController extends Controller
             'message' => 'Product is not deleted.',
         ], 400);
     }
+
+
+    public function storeTenantProduct(Request $request, InventoryService $inventoryService): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->role !== 'company') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'quantity' => 'required|integer|min:0',
+            'category_id' => 'required|exists:categories,id',
+            'unit' => 'required|string|max:50',
+            'low_stock_threshold' => 'nullable|integer|min:0',
+        ]);
+
+        $product = Product::create([
+            'name' => $validated['name'],
+            'price' => $validated['price'],
+            'quantity' => $validated['quantity'],
+            'category_id' => $validated['category_id'],
+            'unit' => $validated['unit'],
+            'low_stock_threshold' =>
+                $validated['low_stock_threshold'] ?? 5,
+            'is_available' => true,
+            'status' => 'active',
+        ]);
+
+        $inventoryService->syncStatus($product);
+
+        $product->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Product added successfully.',
+            'data' => new ProductResource(
+                $product->fresh('category')
+            ),
+        ], 201);
+    }
+    
 }
