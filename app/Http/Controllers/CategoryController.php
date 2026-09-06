@@ -69,6 +69,7 @@ class CategoryController extends Controller
 
 
         $category = Category::create([
+            'company_id' => $request->user()->company_id,
             'name' => $request->name,
             'image' => $imagePath
         ]);
