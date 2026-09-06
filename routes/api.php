@@ -28,84 +28,100 @@ use App\Http\Controllers\Api\TenantDashboardController;
 |
 */
 
-Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
-    return $request->user();
-});
+    Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
+        return $request->user();
+    });
 
-  // Public routes - no authentication required
-  Route::post('/register', [AuthController::class, 'register']);
-  Route::post('/login', [AuthController::class, 'login']);
-  // Protected routes - require valid Sanctum token
-  Route::middleware('auth:sanctum')->group(function () {
-  Route::post('/logout', [AuthController::class, 'logout']);
-  Route::get('/user', [AuthController::class, 'user']);
-  // Example: farming-related routes
-  // Route::apiResource('farms', FarmController::class);
-});
+    // Public routes - no authentication required
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
+    // Protected routes - require valid Sanctum token
+    Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/user', [AuthController::class, 'user']);
+    // Example: farming-related routes
+    // Route::apiResource('farms', FarmController::class);
+    });
 
-Route::prefix('tenant')->group(function () {
+    Route::prefix('tenant')->group(function () {
 
-    Route::post(
-        '/register',
-        [TenantAuthController::class, 'register']
-    );
-
-    Route::post(
-        '/login',
-        [TenantAuthController::class, 'login']
-    );
-
-    Route::middleware('auth:sanctum')->post(
-        '/logout',
-        [TenantAuthController::class, 'logout']
-    );
-
-});
-Route::prefix('tenant')
-    ->middleware([
-        'auth:sanctum',
-        'role:company'
-    ])
-    ->group(function () {
-
-        Route::get(
-            '/dashboard/summary',
-            [TenantDashboardController::class, 'summary']
+        Route::post(
+            '/register',
+            [TenantAuthController::class, 'register']
         );
 
         Route::post(
-            '/products',
-            [ProductController::class, 'storeTenantProduct']
-        );
-        Route::patch(
-            '/products/{id}/stock',
-            [ProductController::class, 'updateTenantStock']
+            '/login',
+            [TenantAuthController::class, 'login']
         );
 
+        Route::middleware('auth:sanctum')->post(
+            '/logout',
+            [TenantAuthController::class, 'logout']
+        );
+
+    });
+    Route::prefix('tenant')
+        ->middleware([
+            'auth:sanctum',
+            'role:company'
+        ])
+        ->group(function () {
+
+            Route::get(
+                '/dashboard/summary',
+                [TenantDashboardController::class, 'summary']
+            );
+
+            Route::get(
+                '/products',
+                [ProductController::class, 'tenantProducts']
+            );
+
+            Route::post(
+                '/products',
+                [ProductController::class, 'storeTenantProduct']
+            );
+
+            Route::put(
+                '/products/{id}',
+                [ProductController::class, 'updateTenantProduct']
+            );
+
+            Route::delete(
+                '/products/{id}',
+                [ProductController::class, 'destroyTenantProduct']
+            );
+
+            Route::patch(
+                '/products/{id}/stock',
+                [ProductController::class, 'updateTenantStock']
+            );
+
+        });
+
+    Route::prefix('products')->group(function () {
+
+        // Public/customer browsing
+        Route::get('/', [ProductController::class, 'index']);
+        Route::get('/{id}', [ProductController::class, 'show']);
+
+        // Admin product management
+        Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+            Route::post('/', [ProductController::class, 'store']);
+            Route::patch('/{id}', [ProductController::class, 'update']);
+            Route::delete('/{id}', [ProductController::class, 'destroy']);
+            Route::patch('/{id}/restore', [ProductController::class, 'restore']);
+        });
     });
 
-Route::prefix('products')->group(function () {
-
-    // Public/customer browsing
-    Route::get('/', [ProductController::class, 'index']);
-    Route::get('/{id}', [ProductController::class, 'show']);
-
-    // Admin product management
-    Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-        Route::post('/', [ProductController::class, 'store']);
-        Route::patch('/{id}', [ProductController::class, 'update']);
-        Route::delete('/{id}', [ProductController::class, 'destroy']);
-        Route::patch('/{id}/restore', [ProductController::class, 'restore']);
-    });
-});
-
-        Route::get('categories', [CategoryController::class, 'index']);
-        Route::get('categories/{id}', [CategoryController::class, 'show']);
-        Route::middleware('auth:sanctum')->group(function () {
-        Route::post('categories', [CategoryController::class, 'store']);
-        Route::put('categories/{id}', [CategoryController::class, 'update']);
-        Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
-    });
+            Route::get('categories', [CategoryController::class, 'index']);
+            Route::get('categories/{id}', [CategoryController::class, 'show']);
+            Route::middleware('auth:sanctum')->group(function () {
+            Route::post('categories', [CategoryController::class, 'store']);
+            Route::put('categories/{id}', [CategoryController::class, 'update']);
+            Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
+        });
 
   
 // Orders routes
@@ -166,91 +182,91 @@ Route::prefix('products')->group(function () {
 
     });
 
-Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
-    Route::middleware('role:user')->get('/my', [PaymentController::class, 'index']);
-    Route::middleware('role:company')->get('/company', [PaymentController::class, 'index']);
-    Route::middleware('role:admin')->get('/', [PaymentController::class, 'index']);
+    Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
+        Route::middleware('role:user')->get('/my', [PaymentController::class, 'index']);
+        Route::middleware('role:company')->get('/company', [PaymentController::class, 'index']);
+        Route::middleware('role:admin')->get('/', [PaymentController::class, 'index']);
 
-    Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
-    Route::get('/{payment}', [PaymentController::class, 'show']);
+        Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
+        Route::get('/{payment}', [PaymentController::class, 'show']);
 
-    Route::middleware('role:admin')->group(function () {
-        Route::post('/manual', [PaymentController::class, 'store']);
-        Route::patch('/{payment}', [PaymentController::class, 'update']);
-        Route::delete('/{payment}', [PaymentController::class, 'destroy']);
+        Route::middleware('role:admin')->group(function () {
+            Route::post('/manual', [PaymentController::class, 'store']);
+            Route::patch('/{payment}', [PaymentController::class, 'update']);
+            Route::delete('/{payment}', [PaymentController::class, 'destroy']);
+        });
     });
-});
-Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback'])
-    ->name('payments.paystack.callback');
-Route::post('/payments/paystack/webhook', [PaymentController::class, 'webhook'])
-    ->name('payments.paystack.webhook');
+    Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback'])
+        ->name('payments.paystack.callback');
+    Route::post('/payments/paystack/webhook', [PaymentController::class, 'webhook'])
+        ->name('payments.paystack.webhook');
 
-// Reports routes
-Route::prefix('reports')->middleware('auth:sanctum')->group(function () {
-    // Normal users: only their sales summary
-    Route::middleware('role:user')->get('/my-sales', [ReportController::class, 'salesSummary']);
-    // Company: sales summary for company orders
-    Route::middleware('role:company')->get('/company-sales', [ReportController::class, 'salesSummary']);
-    // Admin: all reports
-    Route::middleware('role:admin')->group(function () {
-        Route::get('/orders', [ReportController::class, 'ordersSummary']);
-        Route::get('/sales', [ReportController::class, 'salesSummary']);
-        Route::get('/payments', [ReportController::class, 'paymentsSummary']);
+    // Reports routes
+    Route::prefix('reports')->middleware('auth:sanctum')->group(function () {
+        // Normal users: only their sales summary
+        Route::middleware('role:user')->get('/my-sales', [ReportController::class, 'salesSummary']);
+        // Company: sales summary for company orders
+        Route::middleware('role:company')->get('/company-sales', [ReportController::class, 'salesSummary']);
+        // Admin: all reports
+        Route::middleware('role:admin')->group(function () {
+            Route::get('/orders', [ReportController::class, 'ordersSummary']);
+            Route::get('/sales', [ReportController::class, 'salesSummary']);
+            Route::get('/payments', [ReportController::class, 'paymentsSummary']);
+        });
     });
-});
 
-Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
-    Route::get('/dashboard', [DashboardController::class, 'index']);
-});
-
-Route::middleware(['auth:sanctum', 'admin'])->group(function () {
-    Route::post('/products', [ProductController::class, 'store']);
-    Route::post('/categories', [CategoryController::class, 'store']);
-});
-
-Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
-    Route::get('/', [CartController::class, 'index']);
-    Route::post('/items', [CartController::class, 'add']);
-    Route::patch('/items/{id}', [CartController::class, 'update']);
-    Route::delete('/items/{id}', [CartController::class, 'remove']);
-    Route::delete('/clear', [CartController::class, 'clear']);
-    Route::post('/checkout', [CartController::class, 'checkout']);
-});
-
-
-Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__invoke'])
-    ->name('verification.verify');
-
-// Route::middleware('auth:sanctum')->post('/email/verification-notification', function (Request $request) {
-//     if ($request->user()->hasVerifiedEmail()) {
-//         return response()->json([
-//             'message' => 'Email already verified.'
-//         ], 200);
-//     }
-
-//     $request->user()->sendEmailVerificationNotification();
-
-//     return response()->json([
-//         'message' => 'Verification link sent.'
-//     ], 200);
-// })->middleware('throttle:6,1')->name('verification.send');
-// Admin routes
-Route::prefix('admin')->group(function () {
-
-    // Public admin route
-    Route::post('/login', [AdminController::class, 'login']);
-
-    // Protected admin routes
-    Route::middleware('auth:sanctum')->group(function () {
-
+    Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
-
-        Route::get('/profile/{uuid}', [AdminController::class, 'profile']);
-
-        Route::post('/users', [AdminUserController::class, 'index']);
-        Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
-
-        Route::post('/register', [AdminController::class, 'addnewuser']);
-        Route::post('/change_admin_role', [AdminController::class, 'changerole']);
     });
-});
+
+    Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+        Route::post('/products', [ProductController::class, 'store']);
+        Route::post('/categories', [CategoryController::class, 'store']);
+    });
+
+    Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
+        Route::get('/', [CartController::class, 'index']);
+        Route::post('/items', [CartController::class, 'add']);
+        Route::patch('/items/{id}', [CartController::class, 'update']);
+        Route::delete('/items/{id}', [CartController::class, 'remove']);
+        Route::delete('/clear', [CartController::class, 'clear']);
+        Route::post('/checkout', [CartController::class, 'checkout']);
+    });
+
+
+    Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__invoke'])
+        ->name('verification.verify');
+
+    // Route::middleware('auth:sanctum')->post('/email/verification-notification', function (Request $request) {
+    //     if ($request->user()->hasVerifiedEmail()) {
+    //         return response()->json([
+    //             'message' => 'Email already verified.'
+    //         ], 200);
+    //     }
+
+    //     $request->user()->sendEmailVerificationNotification();
+
+    //     return response()->json([
+    //         'message' => 'Verification link sent.'
+    //     ], 200);
+    // })->middleware('throttle:6,1')->name('verification.send');
+    // Admin routes
+    Route::prefix('admin')->group(function () {
+
+        // Public admin route
+        Route::post('/login', [AdminController::class, 'login']);
+
+        // Protected admin routes
+        Route::middleware('auth:sanctum')->group(function () {
+
+            Route::get('/dashboard', [DashboardController::class, 'index']);
+
+            Route::get('/profile/{uuid}', [AdminController::class, 'profile']);
+
+            Route::post('/users', [AdminUserController::class, 'index']);
+            Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
+
+            Route::post('/register', [AdminController::class, 'addnewuser']);
+            Route::post('/change_admin_role', [AdminController::class, 'changerole']);
+        });
+    });

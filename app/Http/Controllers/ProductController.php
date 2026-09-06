@@ -282,24 +282,19 @@ class ProductController extends Controller
         ]);
     }
 
-    public function updateTenantStock( Request $request,int $id, InventoryService $inventoryService): JsonResponse
+    public function updateTenantStock(Request $request,int $id,InventoryService $inventoryService): JsonResponse
     {
         $user = $request->user();
-
-        if ($user->role !== 'company') {
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Company account required.',
-            ], 403);
-
-        }
 
         $validated = $request->validate([
             'quantity' => 'required|integer|min:0',
         ]);
 
-        $product = Product::findOrFail($id);
+        $product = Product::where(
+            'company_id',
+            $user->company_id
+        )
+        ->findOrFail($id);
 
         $product->quantity =
             $validated['quantity'];
@@ -347,11 +342,14 @@ class ProductController extends Controller
     }
 
 
-    public function storeTenantProduct(Request $request, InventoryService $inventoryService): JsonResponse
+    public function storeTenantProduct(Request $request,InventoryService $inventoryService): JsonResponse
     {
         $user = $request->user();
 
-        if ($user->role !== 'company') {
+        if (
+            $user->role !== 'company' ||
+            !$user->company_id
+        ) {
             return response()->json([
                 'success' => false,
                 'message' => 'Company account required.',
@@ -364,22 +362,27 @@ class ProductController extends Controller
             'quantity' => 'required|integer|min:0',
             'category_id' => 'required|exists:categories,id',
             'unit' => 'required|string|max:50',
+            'description' => 'nullable|string',
             'low_stock_threshold' => 'nullable|integer|min:0',
         ]);
 
         $product = Product::create([
+            'company_id' => $user->company_id,
             'name' => $validated['name'],
             'price' => $validated['price'],
             'quantity' => $validated['quantity'],
             'category_id' => $validated['category_id'],
             'unit' => $validated['unit'],
+            'description' => $validated['description'] ?? null,
             'low_stock_threshold' =>
                 $validated['low_stock_threshold'] ?? 5,
             'is_available' => true,
             'status' => 'active',
         ]);
 
-        $inventoryService->syncStatus($product);
+        $inventoryService->syncStatus(
+            $product
+        );
 
         $product->save();
 
@@ -391,5 +394,100 @@ class ProductController extends Controller
             ),
         ], 201);
     }
-    
+
+    public function tenantProducts(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (
+            $user->role !== 'company' ||
+            !$user->company_id
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+        }
+
+        $products = Product::with('category')
+            ->where(
+                'company_id',
+                $user->company_id
+            )
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => ProductResource::collection(
+                $products
+            ),
+        ]);
+    }
+
+    public function updateTenantProduct(Request $request,int $id,InventoryService $inventoryService): JsonResponse
+    {
+        $user = $request->user();
+
+        $product = Product::where(
+            'company_id',
+            $user->company_id
+        )
+        ->findOrFail($id);
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'quantity' => 'required|integer|min:0',
+            'category_id' => 'required|exists:categories,id',
+            'unit' => 'required|string|max:50',
+            'description' => 'nullable|string',
+            'low_stock_threshold' => 'nullable|integer|min:0',
+        ]);
+
+        $product->update([
+            'name' => $validated['name'],
+            'price' => $validated['price'],
+            'quantity' => $validated['quantity'],
+            'category_id' => $validated['category_id'],
+            'unit' => $validated['unit'],
+            'description' =>
+                $validated['description'] ?? null,
+            'low_stock_threshold' =>
+                $validated['low_stock_threshold'] ?? 5,
+        ]);
+
+        $inventoryService->syncStatus(
+            $product
+        );
+
+        $product->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Product updated successfully.',
+            'data' => new ProductResource(
+                $product->fresh('category')
+            ),
+        ]);
+    }
+
+    public function destroyTenantProduct(Request $request,int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $product = Product::where(
+            'company_id',
+            $user->company_id
+        )
+        ->findOrFail($id);
+
+        $product->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Product deleted successfully.',
+        ]);
+    }
+        
 }

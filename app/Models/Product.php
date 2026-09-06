@@ -5,13 +5,14 @@ namespace App\Models;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Company;
 
 class Product extends Model
 {
     use SoftDeletes, Notifiable;
     protected $fillable = [
+        'company_id',
         'name',
-        'status',
         'price',
         'quantity',
         'category_id',
@@ -19,19 +20,23 @@ class Product extends Model
         'image',
         'unit',
         'is_available',
+        'status',
         'low_stock_threshold',
-   
     ];
-
     protected $casts = [
     'price' => 'float',
     'is_available' => 'boolean',
         ];
 
     public function orderItems()
-{
-    return $this->hasMany(OrderItem::class);
-}
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+     public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
  
     public function category()
     {

@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 class Company extends Model
 {
     use HasFactory;
-    protected $fillable = ['name', 'email'];
+    protected $fillable = [
+        'name',
+        'email'
+        ];
 
     public function users() {
         return $this->hasMany(User::class);
@@ -15,5 +18,10 @@ class Company extends Model
 
     public function orders() {
         return $this->hasMany(Order::class);
+    }
+
+    public function products()
+    {
+        return $this->hasMany(Product::class);
     }
 }
