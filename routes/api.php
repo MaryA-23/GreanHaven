@@ -72,6 +72,10 @@ Route::prefix('tenant')
             '/dashboard/summary',
             [TenantDashboardController::class, 'summary']
         );
+        Route::patch(
+            '/products/{id}/stock',
+            [ProductController::class, 'updateTenantStock']
+        );
 
     });
 

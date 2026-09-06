@@ -280,6 +280,43 @@ class ProductController extends Controller
         ]);
     }
 
+    public function updateTenantStock( Request $request,int $id, InventoryService $inventoryService): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($user->role !== 'company') {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+
+        }
+
+        $validated = $request->validate([
+            'quantity' => 'required|integer|min:0',
+        ]);
+
+        $product = Product::findOrFail($id);
+
+        $product->quantity =
+            $validated['quantity'];
+
+        $inventoryService->syncStatus(
+            $product
+        );
+
+        $product->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Stock updated successfully.',
+            'data' => new ProductResource(
+                $product->fresh('category')
+            ),
+        ]);
+    }
+
     /**
      * Restore a soft deleted Product (Admin only).
      */
