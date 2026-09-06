@@ -56,7 +56,9 @@ class ProductController extends Controller
             $query->withTrashed();
         }
 
-        $Products = $query->paginate(10);
+        $Products = $query->paginate(
+        $request->integer('per_page', 10)
+    );
 
         return response()->json([
             'success' => true,
