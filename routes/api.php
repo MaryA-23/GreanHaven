@@ -55,6 +55,11 @@ Route::prefix('tenant')->group(function () {
         [TenantAuthController::class, 'login']
     );
 
+    Route::middleware('auth:sanctum')->post(
+        '/logout',
+        [TenantAuthController::class, 'logout']
+    );
+
 });
 
 Route::prefix('products')->group(function () {
