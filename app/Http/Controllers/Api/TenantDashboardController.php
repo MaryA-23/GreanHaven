@@ -27,6 +27,37 @@ class TenantDashboardController extends Controller
         // Products are currently shared platform products
         $totalProducts = Product::count();
 
+        // Inventory summary
+        $inStock = Product::where(
+            'quantity',
+            '>',
+            0
+        )
+        ->whereColumn(
+            'quantity',
+            '>',
+            'low_stock_threshold'
+        )
+        ->count();
+
+        $lowStock = Product::where(
+            'quantity',
+            '>',
+            0
+        )
+        ->whereColumn(
+            'quantity',
+            '<=',
+            'low_stock_threshold'
+        )
+        ->count();
+
+        $outOfStock = Product::where(
+            'quantity',
+            '<=',
+            0
+        )->count();
+
         // Only orders belonging to this tenant/company
         $totalOrders = Order::where(
             'company_id',
@@ -67,6 +98,10 @@ class TenantDashboardController extends Controller
                 'pending_orders' => $pendingOrders,
                 'completed_orders' => $completedOrders,
                 'total_payments' => $totalPayments,
+
+                'in_stock' => $inStock,
+                'low_stock' => $lowStock,
+                'out_of_stock' => $outOfStock,
             ],
         ]);
     }
