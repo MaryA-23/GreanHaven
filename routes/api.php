@@ -172,6 +172,22 @@ use App\Http\Controllers\TenantNotificationController;
                 ]
             );
 
+            Route::delete(
+            '/notifications/clear-all',
+            [
+                TenantNotificationController::class,
+                'clearAll'
+            ]
+        );
+
+        Route::delete(
+            '/notifications/{id}',
+            [
+                TenantNotificationController::class,
+                'destroy'
+            ]
+        );
+
         });
 
     Route::prefix('products')->group(function () {

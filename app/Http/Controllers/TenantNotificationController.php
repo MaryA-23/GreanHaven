@@ -190,4 +190,64 @@ class TenantNotificationController extends Controller
                 'All notifications marked as read.',
         ]);
     }
+
+    public function destroy(
+    Request $request,
+    int $id
+): JsonResponse
+{
+    $user = $request->user();
+
+    if (
+        $user->role !== 'company' ||
+        !$user->company_id
+    ) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Company account required.',
+        ], 403);
+    }
+
+    $notification =
+        TenantNotification::where(
+            'company_id',
+            $user->company_id
+        )
+        ->findOrFail($id);
+
+    $notification->delete();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Notification deleted.',
+    ]);
+}
+
+
+    public function clearAll(
+        Request $request
+    ): JsonResponse
+    {
+        $user = $request->user();
+
+        if (
+            $user->role !== 'company' ||
+            !$user->company_id
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+        }
+
+        TenantNotification::where(
+            'company_id',
+            $user->company_id
+        )->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'All notifications cleared.',
+        ]);
+    }
 }
