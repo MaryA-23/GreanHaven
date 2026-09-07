@@ -145,9 +145,14 @@ use App\Http\Controllers\Api\TenantDashboardController;
 
   
 // Orders routes
-   Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
+  Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
 
-    // CUSTOMER
+    /*
+    |--------------------------------------------------------------------------
+    | CUSTOMER
+    |--------------------------------------------------------------------------
+    */
+
     Route::middleware('role:user')->group(function () {
 
         Route::post(
@@ -173,7 +178,12 @@ use App\Http\Controllers\Api\TenantDashboardController;
     });
 
 
-    // COMPANY
+    /*
+    |--------------------------------------------------------------------------
+    | COMPANY
+    |--------------------------------------------------------------------------
+    */
+
     Route::middleware('role:company')->group(function () {
 
         Route::get(
@@ -186,20 +196,37 @@ use App\Http\Controllers\Api\TenantDashboardController;
             [OrderController::class, 'show']
         );
 
-        Route::patch(
-            '/{id}/processing',
-            [OrderController::class, 'markAsProcessing']
-        );
-
-        Route::patch(
-            '/{id}/completed',
-            [OrderController::class, 'markAsCompleted']
-        );
-
     });
 
 
-    // ADMIN
+    /*
+    |--------------------------------------------------------------------------
+    | COMPANY OR ADMIN STATUS ACTIONS
+    |
+    | Do NOT put role middleware here.
+    | OrderController already checks:
+    | - role must be company/admin
+    | - company can only update its own order
+    |--------------------------------------------------------------------------
+    */
+
+    Route::patch(
+        '/{id}/processing',
+        [OrderController::class, 'markAsProcessing']
+    );
+
+    Route::patch(
+        '/{id}/completed',
+        [OrderController::class, 'markAsCompleted']
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ADMIN ONLY
+    |--------------------------------------------------------------------------
+    */
+
     Route::middleware('role:admin')->group(function () {
 
         Route::get(
@@ -210,16 +237,6 @@ use App\Http\Controllers\Api\TenantDashboardController;
         Route::get(
             '/{id}',
             [OrderController::class, 'show']
-        );
-
-        Route::patch(
-            '/{id}/processing',
-            [OrderController::class, 'markAsProcessing']
-        );
-
-        Route::patch(
-            '/{id}/completed',
-            [OrderController::class, 'markAsCompleted']
         );
 
         Route::patch(
