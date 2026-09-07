@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
+
 class AuthController extends Controller
 {
     /**
@@ -315,5 +316,52 @@ class AuthController extends Controller
             'last_login' =>
                 $user->last_login,
         ];
+    }
+
+    public function changePassword(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'current_password' => [
+                'required',
+                'string',
+            ],
+
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+            ],
+        ]);
+
+
+        if (
+            !Hash::check(
+                $validated['current_password'],
+                $user->password
+            )
+        ) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect.',
+            ], 422);
+        }
+
+
+        $user->password =
+            Hash::make(
+                $validated['password']
+            );
+
+        $user->save();
+
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password changed successfully.',
+        ]);
     }
 }

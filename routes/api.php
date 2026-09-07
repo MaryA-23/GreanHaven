@@ -45,6 +45,10 @@ use App\Http\Controllers\TenantNotificationController;
         '/profile',
         [AuthController::class, 'updateProfile']
     );
+        Route::post(
+        '/profile/password',
+        [AuthController::class, 'changePassword']
+    );
     // Example: farming-related routes
     // Route::apiResource('farms', FarmController::class);
     });
