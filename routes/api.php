@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Api\TenantAuthController;
 use App\Http\Controllers\Api\TenantDashboardController;
+use App\Http\Controllers\TenantSettingsController;
 
 
 
@@ -116,6 +117,26 @@ use App\Http\Controllers\Api\TenantDashboardController;
             Route::delete(
                 '/categories/{id}',
                 [CategoryController::class, 'tenantDestroy']
+            );
+
+            Route::get(
+                '/settings',
+                [TenantSettingsController::class, 'show']
+            );
+
+            Route::put(
+                '/settings/business',
+                [TenantSettingsController::class, 'updateBusiness']
+            );
+
+            Route::put(
+                '/settings/notifications',
+                [TenantSettingsController::class, 'updateNotifications']
+            );
+
+            Route::put(
+                '/settings/password',
+                [TenantSettingsController::class, 'changePassword']
             );
 
         });
