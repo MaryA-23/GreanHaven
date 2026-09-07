@@ -145,62 +145,96 @@ use App\Http\Controllers\Api\TenantDashboardController;
 
   
 // Orders routes
-    Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
+   Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
 
-        // CUSTOMER
-        Route::middleware('role:user')->group(function () {
-            Route::post('/', [OrderController::class, 'store']);
-            Route::get('/my', [OrderController::class, 'index']);
-            Route::get('/my/{id}', [OrderController::class, 'show']);
-            Route::patch(
-                '/my/{id}/cancel',
-                [OrderController::class, 'cancel']
-            );
-        });
+    // CUSTOMER
+    Route::middleware('role:user')->group(function () {
 
+        Route::post(
+            '/',
+            [OrderController::class, 'store']
+        );
 
-        // COMPANY
-        Route::middleware('role:company')->group(function () {
-            Route::get(
-                '/company',
-                [OrderController::class, 'index']
-            );
-            Route::get(
-                '/company/{id}',
-                [OrderController::class, 'show']
-            );
-        });
+        Route::get(
+            '/my',
+            [OrderController::class, 'index']
+        );
 
+        Route::get(
+            '/my/{id}',
+            [OrderController::class, 'show']
+        );
 
-        // ADMIN
-        Route::middleware('role:admin')->group(function () {
-            Route::get(
-                '/',
-                [OrderController::class, 'index']
-            );
-            Route::get(
-                '/{id}',
-                [OrderController::class, 'show']
-            );
-            Route::patch(
-                '/{id}/processing',
-                [OrderController::class, 'markAsProcessing']
-            );
-            Route::patch(
-                '/{id}/completed',
-                [OrderController::class, 'markAsCompleted']
-            );
-            Route::patch(
-                '/{id}/cancel',
-                [OrderController::class, 'adminCancel']
-            );
-            Route::patch(
-                '/{id}/expire',
-                [OrderController::class, 'adminExpire']
-            );
-        });
+        Route::patch(
+            '/my/{id}/cancel',
+            [OrderController::class, 'cancel']
+        );
 
     });
+
+
+    // COMPANY
+    Route::middleware('role:company')->group(function () {
+
+        Route::get(
+            '/company',
+            [OrderController::class, 'index']
+        );
+
+        Route::get(
+            '/company/{id}',
+            [OrderController::class, 'show']
+        );
+
+        Route::patch(
+            '/{id}/processing',
+            [OrderController::class, 'markAsProcessing']
+        );
+
+        Route::patch(
+            '/{id}/completed',
+            [OrderController::class, 'markAsCompleted']
+        );
+
+    });
+
+
+    // ADMIN
+    Route::middleware('role:admin')->group(function () {
+
+        Route::get(
+            '/',
+            [OrderController::class, 'index']
+        );
+
+        Route::get(
+            '/{id}',
+            [OrderController::class, 'show']
+        );
+
+        Route::patch(
+            '/{id}/processing',
+            [OrderController::class, 'markAsProcessing']
+        );
+
+        Route::patch(
+            '/{id}/completed',
+            [OrderController::class, 'markAsCompleted']
+        );
+
+        Route::patch(
+            '/{id}/cancel',
+            [OrderController::class, 'adminCancel']
+        );
+
+        Route::patch(
+            '/{id}/expire',
+            [OrderController::class, 'adminExpire']
+        );
+
+    });
+
+});
 
     Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
         Route::middleware('role:user')->get('/my', [PaymentController::class, 'index']);
