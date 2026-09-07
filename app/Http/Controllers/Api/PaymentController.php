@@ -26,7 +26,10 @@ class PaymentController extends Controller
     {
         $user = $request->user();
 
-        $query = Payment::with('order'); // eager load order
+       $query = Payment::with([
+            'order.user',
+            'order.company'
+        ]);// eager load order
 
         if ($user->role === 'admin') {
             // Admin sees all payments
