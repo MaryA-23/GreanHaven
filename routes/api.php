@@ -41,6 +41,10 @@ use App\Http\Controllers\TenantNotificationController;
     Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+     Route::post(
+        '/profile',
+        [AuthController::class, 'updateProfile']
+    );
     // Example: farming-related routes
     // Route::apiResource('farms', FarmController::class);
     });
