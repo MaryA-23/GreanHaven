@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Api\TenantAuthController;
 use App\Http\Controllers\Api\TenantDashboardController;
 use App\Http\Controllers\TenantSettingsController;
+use App\Http\Controllers\TenantNotificationController;
 
 
 
@@ -137,6 +138,38 @@ use App\Http\Controllers\TenantSettingsController;
             Route::put(
                 '/settings/password',
                 [TenantSettingsController::class, 'changePassword']
+            );
+
+            Route::get(
+                '/notifications',
+                [
+                    TenantNotificationController::class,
+                    'index'
+                ]
+            );
+
+            Route::get(
+                '/notifications/unread-count',
+                [
+                    TenantNotificationController::class,
+                    'unreadCount'
+                ]
+            );
+
+            Route::patch(
+                '/notifications/{id}/read',
+                [
+                    TenantNotificationController::class,
+                    'markAsRead'
+                ]
+            );
+
+            Route::patch(
+                '/notifications/read-all',
+                [
+                    TenantNotificationController::class,
+                    'markAllAsRead'
+                ]
             );
 
         });

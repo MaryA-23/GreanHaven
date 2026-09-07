@@ -4,6 +4,13 @@ namespace App\Providers;
 
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use App\Models\Order;
+use App\Models\Payment;
+use App\Models\Product;
+
+use App\Observers\OrderObserver;
+use App\Observers\PaymentObserver;
+use App\Observers\ProductObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -33,5 +40,17 @@ class AppServiceProvider extends ServiceProvider
         if (app()->environment('production')) {
             URL::forceScheme('https');
         }
-    }
+
+        Order::observe(
+        OrderObserver::class
+        );
+
+        Payment::observe(
+            PaymentObserver::class
+        );
+
+        Product::observe(
+            ProductObserver::class
+        );
+        }
 }

@@ -3,7 +3,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-
+use App\Models\TenantNotification;
 
 class Company extends Model
 {
@@ -38,4 +38,11 @@ class Company extends Model
     {
         return $this->hasMany(Category::class);
     }
+
+    public function notifications()
+    {
+        return $this->hasMany(
+            TenantNotification::class
+        );
+    }   
 }
