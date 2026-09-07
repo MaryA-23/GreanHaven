@@ -356,6 +356,7 @@ class ProductController extends Controller
             ], 403);
         }
 
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
@@ -364,7 +365,25 @@ class ProductController extends Controller
             'unit' => 'required|string|max:50',
             'description' => 'nullable|string',
             'low_stock_threshold' => 'nullable|integer|min:0',
+
+            // Real product image
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
+
+
+        $imagePath = null;
+
+
+        if ($request->hasFile('image')) {
+
+            $imagePath =
+                $request->file('image')->store(
+                    'products',
+                    'public'
+                );
+
+        }
+
 
         $product = Product::create([
             'company_id' => $user->company_id,
@@ -374,17 +393,21 @@ class ProductController extends Controller
             'category_id' => $validated['category_id'],
             'unit' => $validated['unit'],
             'description' => $validated['description'] ?? null,
+            'image' => $imagePath,
             'low_stock_threshold' =>
                 $validated['low_stock_threshold'] ?? 5,
             'is_available' => true,
             'status' => 'active',
         ]);
 
+
         $inventoryService->syncStatus(
             $product
         );
 
+
         $product->save();
+
 
         return response()->json([
             'success' => true,
@@ -425,15 +448,28 @@ class ProductController extends Controller
         ]);
     }
 
-    public function updateTenantProduct(Request $request,int $id,InventoryService $inventoryService): JsonResponse
+    public function updateTenantProduct(Request $request, int $id,InventoryService $inventoryService): JsonResponse
     {
         $user = $request->user();
+
+
+        if (
+            $user->role !== 'company' ||
+            !$user->company_id
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+        }
+
 
         $product = Product::where(
             'company_id',
             $user->company_id
         )
         ->findOrFail($id);
+
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -443,35 +479,60 @@ class ProductController extends Controller
             'unit' => 'required|string|max:50',
             'description' => 'nullable|string',
             'low_stock_threshold' => 'nullable|integer|min:0',
+
+            // Optional when editing
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
-        $product->update([
-            'name' => $validated['name'],
-            'price' => $validated['price'],
-            'quantity' => $validated['quantity'],
-            'category_id' => $validated['category_id'],
-            'unit' => $validated['unit'],
-            'description' =>
-                $validated['description'] ?? null,
-            'low_stock_threshold' =>
-                $validated['low_stock_threshold'] ?? 5,
-        ]);
 
-        $inventoryService->syncStatus(
-            $product
-        );
+        /*
+        |--------------------------------------------------------------------------
+        | Replace image only when a new one is uploaded
+        |--------------------------------------------------------------------------
+        */
 
-        $product->save();
+        if ($request->hasFile('image')) {
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Product updated successfully.',
-            'data' => new ProductResource(
-                $product->fresh('category')
-            ),
-        ]);
+            if (
+                $product->image &&
+                Storage::disk('public')->exists(
+                    $product->image
+                )
+        ) {
+            Storage::disk('public')->delete(
+                $product->image
+            );
+        }
+
+
+        $validated['image'] =
+            $request->file('image')->store(
+                'products',
+                'public'
+            );
+
     }
 
+
+    $product->update($validated);
+
+
+    $inventoryService->syncStatus(
+        $product
+    );
+
+
+    $product->save();
+
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Product updated successfully.',
+        'data' => new ProductResource(
+            $product->fresh('category')
+        ),
+    ]);
+}
     public function destroyTenantProduct(Request $request,int $id): JsonResponse
     {
         $user = $request->user();
