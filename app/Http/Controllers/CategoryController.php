@@ -192,12 +192,33 @@ class CategoryController extends Controller
     {
         $user = $request->user();
 
+        if (
+            $user->role !== 'company' ||
+            !$user->company_id
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+        }
+
         $categories = Category::where(
             'company_id',
             $user->company_id
         )
+        ->withCount('products')
         ->latest()
         ->get();
+
+        $categories->transform(function ($category) {
+
+            $category->image_url =
+                $category->image
+                    ? asset('storage/' . $category->image)
+                    : null;
+
+            return $category;
+        });
 
         return response()->json([
             'success' => true,
@@ -205,13 +226,24 @@ class CategoryController extends Controller
         ]);
     }
 
+
     public function tenantStore(Request $request): JsonResponse
     {
         $user = $request->user();
 
+        if (
+            $user->role !== 'company' ||
+            !$user->company_id
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'image' => 'nullable|string|max:255',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $exists = Category::where(
@@ -231,11 +263,30 @@ class CategoryController extends Controller
             ], 422);
         }
 
+        $imagePath = null;
+
+        if ($request->hasFile('image')) {
+
+            $imagePath =
+                $request->file('image')
+                    ->store(
+                        'categories',
+                        'public'
+                    );
+        }
+
         $category = Category::create([
             'company_id' => $user->company_id,
             'name' => $validated['name'],
-            'image' => $validated['image'] ?? null,
+            'image' => $imagePath,
         ]);
+
+        $category->image_url =
+            $category->image
+                ? asset(
+                    'storage/' . $category->image
+                )
+                : null;
 
         return response()->json([
             'success' => true,
@@ -244,9 +295,20 @@ class CategoryController extends Controller
         ], 201);
     }
 
+
     public function tenantUpdate(Request $request,int $id): JsonResponse
     {
         $user = $request->user();
+
+        if (
+            $user->role !== 'company' ||
+            !$user->company_id
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+        }
 
         $category = Category::where(
             'company_id',
@@ -256,7 +318,7 @@ class CategoryController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'image' => 'nullable|string|max:255',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
 
         $duplicate = Category::where(
@@ -281,10 +343,42 @@ class CategoryController extends Controller
             ], 422);
         }
 
-        $category->update([
-            'name' => $validated['name'],
-            'image' => $validated['image'] ?? null,
-        ]);
+        $category->name =
+            $validated['name'];
+
+        /*
+        |--------------------------------------------------------------------------
+        | Replace image only when a new image is uploaded
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->hasFile('image')) {
+
+            if (
+                $category->image &&
+                Storage::disk('public')
+                    ->exists($category->image)
+            ) {
+                Storage::disk('public')
+                    ->delete($category->image);
+            }
+
+            $category->image =
+                $request->file('image')
+                    ->store(
+                        'categories',
+                        'public'
+                    );
+        }
+
+        $category->save();
+
+        $category->image_url =
+            $category->image
+                ? asset(
+                    'storage/' . $category->image
+                )
+                : null;
 
         return response()->json([
             'success' => true,
@@ -293,9 +387,20 @@ class CategoryController extends Controller
         ]);
     }
 
+
     public function tenantDestroy(Request $request,int $id): JsonResponse
     {
         $user = $request->user();
+
+        if (
+            $user->role !== 'company' ||
+            !$user->company_id
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Company account required.',
+            ], 403);
+        }
 
         $category = Category::where(
             'company_id',
@@ -316,6 +421,21 @@ class CategoryController extends Controller
                 'message' =>
                     'You cannot delete this category because products are using it.',
             ], 422);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Delete category image
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $category->image &&
+            Storage::disk('public')
+                ->exists($category->image)
+        ) {
+            Storage::disk('public')
+                ->delete($category->image);
         }
 
         $category->delete();
