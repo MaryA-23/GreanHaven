@@ -1,190 +1,255 @@
 <?php
 
-use App\Http\Controllers\Api\PaymentController;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ProductController;
-use App\Http\Controllers\ReportController;
-use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\OrderController;
-use App\Http\Controllers\CategoryController;
-use App\Http\Controllers\Admin\DashboardController;   
-use App\Http\Controllers\Auth\PublicVerifyEmailController;  
-use App\Http\Controllers\CartController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\TenantAuthController;
 use App\Http\Controllers\Api\TenantDashboardController;
-use App\Http\Controllers\TenantSettingsController;
+use App\Http\Controllers\Auth\PublicVerifyEmailController;
+use App\Http\Controllers\CartController;
+use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TenantNotificationController;
-
+use App\Http\Controllers\TenantSettingsController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 
 /*
-| API Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| is assigned the "api" middleware group. Enjoy building your API!
-|
+| CURRENT AUTHENTICATED USER
+|--------------------------------------------------------------------------
 */
 
-    Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
+Route::middleware(['auth:sanctum'])->get(
+    '/user',
+    function (Request $request) {
         return $request->user();
-    });
+    }
+);
 
-    // Public routes - no authentication required
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
-    // Protected routes - require valid Sanctum token
-    Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
-    Route::get('/user', [AuthController::class, 'user']);
-     Route::post(
+
+/*
+|--------------------------------------------------------------------------
+| PUBLIC CUSTOMER AUTHENTICATION
+|--------------------------------------------------------------------------
+*/
+
+Route::post(
+    '/register',
+    [AuthController::class, 'register']
+);
+
+Route::post(
+    '/login',
+    [AuthController::class, 'login']
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| PROTECTED CUSTOMER PROFILE
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware('auth:sanctum')->group(function () {
+
+    Route::post(
+        '/logout',
+        [AuthController::class, 'logout']
+    );
+
+    Route::get(
+        '/user',
+        [AuthController::class, 'user']
+    );
+
+    Route::post(
         '/profile',
         [AuthController::class, 'updateProfile']
     );
-        Route::post(
+
+    Route::post(
         '/profile/password',
         [AuthController::class, 'changePassword']
     );
-    // Example: farming-related routes
-    // Route::apiResource('farms', FarmController::class);
-    });
+});
 
-    Route::prefix('tenant')->group(function () {
 
-        Route::post(
-            '/register',
-            [TenantAuthController::class, 'register']
+/*
+|--------------------------------------------------------------------------
+| TENANT AUTHENTICATION
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('tenant')->group(function () {
+
+    Route::post(
+        '/register',
+        [TenantAuthController::class, 'register']
+    );
+
+    Route::post(
+        '/login',
+        [TenantAuthController::class, 'login']
+    );
+
+    Route::middleware('auth:sanctum')->post(
+        '/logout',
+        [TenantAuthController::class, 'logout']
+    );
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| TENANT / COMPANY ROUTES
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('tenant')
+    ->middleware([
+        'auth:sanctum',
+        'role:company',
+    ])
+    ->group(function () {
+
+        /*
+        |--------------------------------------------------------------------------
+        | Dashboard
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get(
+            '/dashboard/summary',
+            [TenantDashboardController::class, 'summary']
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Products
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get(
+            '/products',
+            [ProductController::class, 'tenantProducts']
         );
 
         Route::post(
-            '/login',
-            [TenantAuthController::class, 'login']
+            '/products',
+            [ProductController::class, 'storeTenantProduct']
         );
 
-        Route::middleware('auth:sanctum')->post(
-            '/logout',
-            [TenantAuthController::class, 'logout']
+        Route::put(
+            '/products/{id}',
+            [ProductController::class, 'updateTenantProduct']
         );
 
-    });
-    Route::prefix('tenant')
-        ->middleware([
-            'auth:sanctum',
-            'role:company'
-        ])
-        ->group(function () {
+        Route::delete(
+            '/products/{id}',
+            [ProductController::class, 'destroyTenantProduct']
+        );
 
-            Route::get(
-                '/dashboard/summary',
-                [TenantDashboardController::class, 'summary']
-            );
+        Route::patch(
+            '/products/{id}/stock',
+            [ProductController::class, 'updateTenantStock']
+        );
 
-            Route::get(
-                '/products',
-                [ProductController::class, 'tenantProducts']
-            );
 
-            Route::post(
-                '/products',
-                [ProductController::class, 'storeTenantProduct']
-            );
+        /*
+        |--------------------------------------------------------------------------
+        | MASTER CATEGORIES
+        |--------------------------------------------------------------------------
+        |
+        | Companies can only VIEW categories.
+        |
+        | Categories are created, updated and deleted by GreenHaven
+        | Super Admin.
+        |
+        */
 
-            Route::put(
-                '/products/{id}',
-                [ProductController::class, 'updateTenantProduct']
-            );
+        Route::get(
+            '/categories',
+            [CategoryController::class, 'tenantIndex']
+        );
 
-            Route::delete(
-                '/products/{id}',
-                [ProductController::class, 'destroyTenantProduct']
-            );
 
-            Route::patch(
-                '/products/{id}/stock',
-                [ProductController::class, 'updateTenantStock']
-            );
+        /*
+        |--------------------------------------------------------------------------
+        | Settings
+        |--------------------------------------------------------------------------
+        */
 
-            Route::get(
-                '/categories',
-                [CategoryController::class, 'tenantIndex']
-            );
+        Route::get(
+            '/settings',
+            [TenantSettingsController::class, 'show']
+        );
 
-            Route::post(
-                '/categories',
-                [CategoryController::class, 'tenantStore']
-            );
+        Route::put(
+            '/settings/business',
+            [TenantSettingsController::class, 'updateBusiness']
+        );
 
-            Route::put(
-                '/categories/{id}',
-                [CategoryController::class, 'tenantUpdate']
-            );
+        Route::put(
+            '/settings/notifications',
+            [TenantSettingsController::class, 'updateNotifications']
+        );
 
-            Route::delete(
-                '/categories/{id}',
-                [CategoryController::class, 'tenantDestroy']
-            );
+        Route::put(
+            '/settings/password',
+            [TenantSettingsController::class, 'changePassword']
+        );
 
-            Route::get(
-                '/settings',
-                [TenantSettingsController::class, 'show']
-            );
 
-            Route::put(
-                '/settings/business',
-                [TenantSettingsController::class, 'updateBusiness']
-            );
+        /*
+        |--------------------------------------------------------------------------
+        | Notifications
+        |--------------------------------------------------------------------------
+        */
 
-            Route::put(
-                '/settings/notifications',
-                [TenantSettingsController::class, 'updateNotifications']
-            );
+        Route::get(
+            '/notifications',
+            [
+                TenantNotificationController::class,
+                'index',
+            ]
+        );
 
-            Route::put(
-                '/settings/password',
-                [TenantSettingsController::class, 'changePassword']
-            );
+        Route::get(
+            '/notifications/unread-count',
+            [
+                TenantNotificationController::class,
+                'unreadCount',
+            ]
+        );
 
-            Route::get(
-                '/notifications',
-                [
-                    TenantNotificationController::class,
-                    'index'
-                ]
-            );
+        Route::patch(
+            '/notifications/{id}/read',
+            [
+                TenantNotificationController::class,
+                'markAsRead',
+            ]
+        );
 
-            Route::get(
-                '/notifications/unread-count',
-                [
-                    TenantNotificationController::class,
-                    'unreadCount'
-                ]
-            );
+        Route::patch(
+            '/notifications/read-all',
+            [
+                TenantNotificationController::class,
+                'markAllAsRead',
+            ]
+        );
 
-            Route::patch(
-                '/notifications/{id}/read',
-                [
-                    TenantNotificationController::class,
-                    'markAsRead'
-                ]
-            );
-
-            Route::patch(
-                '/notifications/read-all',
-                [
-                    TenantNotificationController::class,
-                    'markAllAsRead'
-                ]
-            );
-
-            Route::delete(
+        Route::delete(
             '/notifications/clear-all',
             [
                 TenantNotificationController::class,
-                'clearAll'
+                'clearAll',
             ]
         );
 
@@ -192,230 +257,477 @@ use App\Http\Controllers\TenantNotificationController;
             '/notifications/{id}',
             [
                 TenantNotificationController::class,
-                'destroy'
+                'destroy',
             ]
         );
-
-        });
-
-    Route::prefix('products')->group(function () {
-
-        // Public/customer browsing
-        Route::get('/', [ProductController::class, 'index']);
-        Route::get('/{id}', [ProductController::class, 'show']);
-
-        // Admin product management
-        Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-            Route::post('/', [ProductController::class, 'store']);
-            Route::patch('/{id}', [ProductController::class, 'update']);
-            Route::delete('/{id}', [ProductController::class, 'destroy']);
-            Route::patch('/{id}/restore', [ProductController::class, 'restore']);
-        });
     });
 
-            Route::get('categories', [CategoryController::class, 'index']);
-            Route::get('categories/{id}', [CategoryController::class, 'show']);
-            Route::middleware('auth:sanctum')->group(function () {
-            Route::post('categories', [CategoryController::class, 'store']);
-            Route::put('categories/{id}', [CategoryController::class, 'update']);
-            Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
-        });
 
-  
-// Orders routes
-  Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
+/*
+|--------------------------------------------------------------------------
+| PUBLIC PRODUCTS
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('products')->group(function () {
+
+    Route::get(
+        '/',
+        [ProductController::class, 'index']
+    );
+
+    Route::get(
+        '/{id}',
+        [ProductController::class, 'show']
+    );
+
 
     /*
     |--------------------------------------------------------------------------
-    | CUSTOMER
+    | ADMIN PRODUCT MANAGEMENT
     |--------------------------------------------------------------------------
     */
 
-    Route::middleware('role:user')->group(function () {
+    Route::middleware([
+        'auth:sanctum',
+        'role:admin',
+    ])->group(function () {
 
         Route::post(
             '/',
-            [OrderController::class, 'store']
-        );
-
-        Route::get(
-            '/my',
-            [OrderController::class, 'index']
-        );
-
-        Route::get(
-            '/my/{id}',
-            [OrderController::class, 'show']
+            [ProductController::class, 'store']
         );
 
         Route::patch(
-            '/my/{id}/cancel',
-            [OrderController::class, 'cancel']
+            '/{id}',
+            [ProductController::class, 'update']
         );
 
+        Route::delete(
+            '/{id}',
+            [ProductController::class, 'destroy']
+        );
+
+        Route::patch(
+            '/{id}/restore',
+            [ProductController::class, 'restore']
+        );
+    });
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| MASTER CATEGORIES
+|--------------------------------------------------------------------------
+|
+| Everyone can view categories.
+|
+| Only Super Admin can:
+|
+| - create
+| - update
+| - delete
+|
+*/
+
+Route::get(
+    '/categories',
+    [CategoryController::class, 'index']
+);
+
+Route::get(
+    '/categories/{id}',
+    [CategoryController::class, 'show']
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| SUPER ADMIN CATEGORY MANAGEMENT
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware([
+    'auth:sanctum',
+    'role:admin',
+])->group(function () {
+
+    Route::post(
+        '/categories',
+        [CategoryController::class, 'store']
+    );
+
+    Route::put(
+        '/categories/{id}',
+        [CategoryController::class, 'update']
+    );
+
+    Route::delete(
+        '/categories/{id}',
+        [CategoryController::class, 'destroy']
+    );
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| ORDERS
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('orders')
+    ->middleware('auth:sanctum')
+    ->group(function () {
+
+        /*
+        |--------------------------------------------------------------------------
+        | CUSTOMER ORDERS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::middleware('role:user')
+            ->group(function () {
+
+                Route::post(
+                    '/',
+                    [OrderController::class, 'store']
+                );
+
+                Route::get(
+                    '/my',
+                    [OrderController::class, 'index']
+                );
+
+                Route::get(
+                    '/my/{id}',
+                    [OrderController::class, 'show']
+                );
+
+                Route::patch(
+                    '/my/{id}/cancel',
+                    [OrderController::class, 'cancel']
+                );
+            });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | COMPANY ORDERS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::middleware('role:company')
+            ->group(function () {
+
+                Route::get(
+                    '/company',
+                    [OrderController::class, 'index']
+                );
+
+                Route::get(
+                    '/company/{id}',
+                    [OrderController::class, 'show']
+                );
+            });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | COMPANY OR ADMIN STATUS ACTIONS
+        |--------------------------------------------------------------------------
+        |
+        | OrderController handles the authorization for these actions.
+        |
+        */
+
+        Route::patch(
+            '/{id}/processing',
+            [OrderController::class, 'markAsProcessing']
+        );
+
+        Route::patch(
+            '/{id}/completed',
+            [OrderController::class, 'markAsCompleted']
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | ADMIN ORDERS
+        |--------------------------------------------------------------------------
+        */
+
+        Route::middleware('role:admin')
+            ->group(function () {
+
+                Route::get(
+                    '/',
+                    [OrderController::class, 'index']
+                );
+
+                Route::get(
+                    '/{id}',
+                    [OrderController::class, 'show']
+                );
+
+                Route::patch(
+                    '/{id}/cancel',
+                    [OrderController::class, 'adminCancel']
+                );
+
+                Route::patch(
+                    '/{id}/expire',
+                    [OrderController::class, 'adminExpire']
+                );
+            });
     });
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | COMPANY
-    |--------------------------------------------------------------------------
-    */
+/*
+|--------------------------------------------------------------------------
+| PAYMENTS
+|--------------------------------------------------------------------------
+*/
 
-    Route::middleware('role:company')->group(function () {
+Route::prefix('payments')
+    ->middleware('auth:sanctum')
+    ->group(function () {
 
-        Route::get(
+        Route::middleware('role:user')->get(
+            '/my',
+            [PaymentController::class, 'index']
+        );
+
+        Route::middleware('role:company')->get(
             '/company',
-            [OrderController::class, 'index']
+            [PaymentController::class, 'index']
+        );
+
+        Route::middleware('role:admin')->get(
+            '/',
+            [PaymentController::class, 'index']
+        );
+
+        Route::post(
+            '/paystack/pay',
+            [PaymentController::class, 'initialize']
         );
 
         Route::get(
-            '/company/{id}',
-            [OrderController::class, 'show']
+            '/{payment}',
+            [PaymentController::class, 'show']
         );
 
+        Route::middleware('role:admin')
+            ->group(function () {
+
+                Route::post(
+                    '/manual',
+                    [PaymentController::class, 'store']
+                );
+
+                Route::patch(
+                    '/{payment}',
+                    [PaymentController::class, 'update']
+                );
+
+                Route::delete(
+                    '/{payment}',
+                    [PaymentController::class, 'destroy']
+                );
+            });
     });
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | COMPANY OR ADMIN STATUS ACTIONS
-    |
-    | Do NOT put role middleware here.
-    | OrderController already checks:
-    | - role must be company/admin
-    | - company can only update its own order
-    |--------------------------------------------------------------------------
-    */
+/*
+|--------------------------------------------------------------------------
+| PAYSTACK
+|--------------------------------------------------------------------------
+*/
 
-    Route::patch(
-        '/{id}/processing',
-        [OrderController::class, 'markAsProcessing']
-    );
+Route::match(
+    ['get', 'post'],
+    '/payments/paystack/callback',
+    [PaymentController::class, 'callback']
+)->name('payments.paystack.callback');
 
-    Route::patch(
-        '/{id}/completed',
-        [OrderController::class, 'markAsCompleted']
-    );
+Route::post(
+    '/payments/paystack/webhook',
+    [PaymentController::class, 'webhook']
+)->name('payments.paystack.webhook');
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | ADMIN ONLY
-    |--------------------------------------------------------------------------
-    */
+/*
+|--------------------------------------------------------------------------
+| REPORTS
+|--------------------------------------------------------------------------
+*/
 
-    Route::middleware('role:admin')->group(function () {
+Route::prefix('reports')
+    ->middleware('auth:sanctum')
+    ->group(function () {
+
+        Route::middleware('role:user')->get(
+            '/my-sales',
+            [ReportController::class, 'salesSummary']
+        );
+
+        Route::middleware('role:company')->get(
+            '/company-sales',
+            [ReportController::class, 'salesSummary']
+        );
+
+        Route::middleware('role:admin')
+            ->group(function () {
+
+                Route::get(
+                    '/orders',
+                    [ReportController::class, 'ordersSummary']
+                );
+
+                Route::get(
+                    '/sales',
+                    [ReportController::class, 'salesSummary']
+                );
+
+                Route::get(
+                    '/payments',
+                    [ReportController::class, 'paymentsSummary']
+                );
+            });
+    });
+
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN DASHBOARD
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware([
+    'auth:sanctum',
+    'role:admin',
+])
+    ->prefix('admin')
+    ->group(function () {
+
+        Route::get(
+            '/dashboard',
+            [DashboardController::class, 'index']
+        );
+    });
+
+
+/*
+|--------------------------------------------------------------------------
+| CART
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware('auth:sanctum')
+    ->prefix('cart')
+    ->group(function () {
 
         Route::get(
             '/',
-            [OrderController::class, 'index']
+            [CartController::class, 'index']
+        );
+
+        Route::post(
+            '/items',
+            [CartController::class, 'add']
+        );
+
+        Route::patch(
+            '/items/{id}',
+            [CartController::class, 'update']
+        );
+
+        Route::delete(
+            '/items/{id}',
+            [CartController::class, 'remove']
+        );
+
+        Route::delete(
+            '/clear',
+            [CartController::class, 'clear']
+        );
+
+        Route::post(
+            '/checkout',
+            [CartController::class, 'checkout']
+        );
+    });
+
+
+/*
+|--------------------------------------------------------------------------
+| EMAIL VERIFICATION
+|--------------------------------------------------------------------------
+*/
+
+Route::get(
+    '/email/verify/{id}/{hash}',
+    [PublicVerifyEmailController::class, '__invoke']
+)
+    ->name('verification.verify');
+
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN AUTHENTICATION AND USERS
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('admin')->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Admin login
+    |--------------------------------------------------------------------------
+    */
+
+    Route::post(
+        '/login',
+        [AdminController::class, 'login']
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Protected admin routes
+    |--------------------------------------------------------------------------
+    */
+
+    Route::middleware([
+        'auth:sanctum',
+        'role:admin',
+    ])->group(function () {
+
+        Route::get(
+            '/profile/{uuid}',
+            [AdminController::class, 'profile']
+        );
+
+        Route::post(
+            '/users',
+            [AdminUserController::class, 'index']
         );
 
         Route::get(
-            '/{id}',
-            [OrderController::class, 'show']
+            '/users/{user_id}',
+            [AdminUserController::class, 'show']
         );
 
-        Route::patch(
-            '/{id}/cancel',
-            [OrderController::class, 'adminCancel']
+        Route::post(
+            '/register',
+            [AdminController::class, 'addnewuser']
         );
 
-        Route::patch(
-            '/{id}/expire',
-            [OrderController::class, 'adminExpire']
+        Route::post(
+            '/change_admin_role',
+            [AdminController::class, 'changerole']
         );
-
     });
-
 });
-
-    Route::prefix('payments')->middleware('auth:sanctum')->group(function () {
-        Route::middleware('role:user')->get('/my', [PaymentController::class, 'index']);
-        Route::middleware('role:company')->get('/company', [PaymentController::class, 'index']);
-        Route::middleware('role:admin')->get('/', [PaymentController::class, 'index']);
-
-        Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
-        Route::get('/{payment}', [PaymentController::class, 'show']);
-
-        Route::middleware('role:admin')->group(function () {
-            Route::post('/manual', [PaymentController::class, 'store']);
-            Route::patch('/{payment}', [PaymentController::class, 'update']);
-            Route::delete('/{payment}', [PaymentController::class, 'destroy']);
-        });
-    });
-    Route::match(['get', 'post'], '/payments/paystack/callback', [PaymentController::class, 'callback'])
-        ->name('payments.paystack.callback');
-    Route::post('/payments/paystack/webhook', [PaymentController::class, 'webhook'])
-        ->name('payments.paystack.webhook');
-
-    // Reports routes
-    Route::prefix('reports')->middleware('auth:sanctum')->group(function () {
-        // Normal users: only their sales summary
-        Route::middleware('role:user')->get('/my-sales', [ReportController::class, 'salesSummary']);
-        // Company: sales summary for company orders
-        Route::middleware('role:company')->get('/company-sales', [ReportController::class, 'salesSummary']);
-        // Admin: all reports
-        Route::middleware('role:admin')->group(function () {
-            Route::get('/orders', [ReportController::class, 'ordersSummary']);
-            Route::get('/sales', [ReportController::class, 'salesSummary']);
-            Route::get('/payments', [ReportController::class, 'paymentsSummary']);
-        });
-    });
-
-    Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
-        Route::get('/dashboard', [DashboardController::class, 'index']);
-    });
-
-    Route::middleware(['auth:sanctum', 'admin'])->group(function () {
-        Route::post('/products', [ProductController::class, 'store']);
-        Route::post('/categories', [CategoryController::class, 'store']);
-    });
-
-    Route::middleware('auth:sanctum')->prefix('cart')->group(function () {
-        Route::get('/', [CartController::class, 'index']);
-        Route::post('/items', [CartController::class, 'add']);
-        Route::patch('/items/{id}', [CartController::class, 'update']);
-        Route::delete('/items/{id}', [CartController::class, 'remove']);
-        Route::delete('/clear', [CartController::class, 'clear']);
-        Route::post('/checkout', [CartController::class, 'checkout']);
-    });
-
-
-    Route::get('/email/verify/{id}/{hash}', [PublicVerifyEmailController::class, '__invoke'])
-        ->name('verification.verify');
-
-    // Route::middleware('auth:sanctum')->post('/email/verification-notification', function (Request $request) {
-    //     if ($request->user()->hasVerifiedEmail()) {
-    //         return response()->json([
-    //             'message' => 'Email already verified.'
-    //         ], 200);
-    //     }
-
-    //     $request->user()->sendEmailVerificationNotification();
-
-    //     return response()->json([
-    //         'message' => 'Verification link sent.'
-    //     ], 200);
-    // })->middleware('throttle:6,1')->name('verification.send');
-    // Admin routes
-    Route::prefix('admin')->group(function () {
-
-        // Public admin route
-        Route::post('/login', [AdminController::class, 'login']);
-
-        // Protected admin routes
-        Route::middleware('auth:sanctum')->group(function () {
-
-            Route::get('/dashboard', [DashboardController::class, 'index']);
-
-            Route::get('/profile/{uuid}', [AdminController::class, 'profile']);
-
-            Route::post('/users', [AdminUserController::class, 'index']);
-            Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
-
-            Route::post('/register', [AdminController::class, 'addnewuser']);
-            Route::post('/change_admin_role', [AdminController::class, 'changerole']);
-        });
-    });
