@@ -3,7 +3,6 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -11,50 +10,45 @@ class AdminCreationNotification extends Notification
 {
     use Queueable;
 
-    /**
-     * Create a new notification instance.
-     */
+    public array $mail_details;
 
-    public $mail_details;
-    /**
-     * Create a new notification instance.
-     * @return void
-     */
-    public function __construct($mail_details)
+    public function __construct(array $mail_details)
     {
         $this->mail_details = $mail_details;
-    }   
+    }
 
-
-    /**
-     * Get the notification's delivery channels.
-     *
-     * @return array<int, string>
-     */
     public function via(object $notifiable): array
     {
         return ['mail'];
     }
 
-    /**
-     * Get the mail representation of the notification.
-     */
     public function toMail(object $notifiable): MailMessage
     {
+        $name = $this->mail_details['name'];
+        $email = $this->mail_details['email'];
+        $password = $this->mail_details['password'];
+
+        $frontendUrl = rtrim(
+            config('app.frontend_url', 'http://localhost:4200'),
+            '/'
+        );
+
+        $loginUrl = $frontendUrl . '/super-admin/login';
+
         return (new MailMessage)
-                    ->subject('You have been registered as an Admin on Greenhaven platform.')
-                    ->view('emails.admin-creation', ['mail_details' => $this->mail_details] );  
+            ->subject('Your GreenHaven administrator account')
+            ->greeting('Hello ' . $name . ',')
+            ->line('An administrator account has been created for you on GreenHaven.')
+            ->line('Use the following details to sign in:')
+            ->line('Email: ' . $email)
+            ->line('Password: ' . $password)
+            ->action('Sign in to GreenHaven', $loginUrl)
+            ->line('Keep these login details private.')
+            ->salutation('The GreenHaven Team');
     }
 
-    /**
-     * Get the array representation of the notification.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(object $notifiable): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 }

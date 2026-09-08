@@ -3,250 +3,340 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use App\Models\Admin;
 use App\Notifications\AdminCreationNotification;
 use App\Notifications\AdminRoleChangedNotification;
-use Illuminate\Support\Facades\DB;
-use App\Keygen\Keygen;
-
-use Ramsey\Uuid\Uuid;
-use Illuminate\Support\Str;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Throwable;
 
 class AdminController extends Controller
 {
-    //allowing Admins Login
+    /*
+    |--------------------------------------------------------------------------
+    | Login
+    |--------------------------------------------------------------------------
+    */
+
     public function login(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string', 'min:8'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
+        $admin = Admin::where('email', $request->email)->first();
+
+        if (!$admin || !Hash::check($request->password, $admin->password)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Invalid email or password.',
+            ], 401);
+        }
+
+        if ($admin->status === 'inactive') {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Your admin account is inactive.',
+            ], 403);
+        }
+
+        $admin->tokens()->delete();
+
+        $token = $admin->createToken('admin-token')->plainTextToken;
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Login successful.',
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'admin' => $admin,
+        ]);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | First Super Admin Registration
+    |--------------------------------------------------------------------------
+    |
+    | Only available locally and only before a Super Admin exists.
+    | The role is assigned by the server.
+    |
+    */
+
+    public function register(Request $request)
+    {
+        if (
+            !app()->environment('local') ||
+            !in_array($request->ip(), ['127.0.0.1', '::1'], true)
+        ) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Initial registration is only available locally.',
+            ], 403);
+        }
+
+        // Prevent simultaneous first-account registrations.
+        $lock = Cache::lock('greenhaven-first-super-admin', 120);
+
+        if (!$lock->get()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Registration is already in progress.',
+            ], 409);
+        }
+
         try {
-            $validation = Validator::make($request->all(), [
-                'email' => 'required|email',
-                'password' => 'required|string|min:8',
-            ]);
-
-            if ($validation->fails()) {
+            if (Admin::where('role', 'super_admin')->exists()) {
                 return response()->json([
                     'status' => 'failed',
-                    'message' => $validation->errors()->first(),
-                ], 422);
-            }
-
-            $admin = Admin::where('email', $request->email)->first();
-
-            if (!$admin || !Hash::check($request->password, $admin->password)) {
-                return response()->json([
-                    'status' => 'failed',
-                    'message' => 'Invalid email or password',
-                ], 401);
-            }
-
-            if ($admin->status === 'inactive') {
-                return response()->json([
-                    'status' => 'failed',
-                    'message' => 'Your admin account is inactive',
+                    'message' => 'A Super Admin already exists. Please sign in.',
                 ], 403);
             }
 
-            // Remove old admin tokens
-            $admin->tokens()->delete();
+            return $this->createAdmin($request, 'super_admin');
+        } finally {
+            $lock->release();
+        }
+    }
 
-            // Create Sanctum token
-            $token = $admin->createToken('admin-token')->plainTextToken;
+    /*
+    |--------------------------------------------------------------------------
+    | Create Additional Admins
+    |--------------------------------------------------------------------------
+    */
 
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Login successful',
-                'access_token' => $token,
-                'token_type' => 'Bearer',
-                'admin' => $admin,
-            ], 200);
+    public function addnewuser(Request $request)
+    {
+        $currentAdmin = $request->user();
 
-        } catch (\Exception $e) {
+        if (
+            !($currentAdmin instanceof Admin) ||
+            $currentAdmin->role !== 'super_admin'
+        ) {
             return response()->json([
                 'status' => 'failed',
-                'message' => $e->getMessage(),
+                'message' => 'Only a Super Admin can create admin accounts.',
+            ], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'role' => ['required', Rule::in(['admin', 'super_admin'])],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
+
+        return $this->createAdmin($request, $request->input('role'));
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Shared Account Creation
+    |--------------------------------------------------------------------------
+    */
+
+    private function createAdmin(Request $request, string $role)
+    {
+        $validator = Validator::make($request->all(), [
+            'surname' => ['required', 'string', 'max:100'],
+            'othernames' => ['required', 'string', 'max:100'],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique(Admin::class, 'email'),
+            ],
+            'phone' => ['required', 'string', 'max:30'],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $mailer = config('mail.default');
+        $transport = config("mail.mailers.{$mailer}.transport");
+
+        if (!$transport || in_array($transport, ['log', 'array'], true)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Configure an email service before registering.',
+            ], 503);
+        }
+
+        $data = $validator->validated();
+        $password = Str::random(20);
+        $admin = new Admin();
+
+        try {
+            $admin->getConnection()->transaction(
+                function () use ($admin, $data, $password, $role) {
+                    $admin->forceFill([
+                        'uuid' => (string) Str::uuid(),
+                        'surname' => $data['surname'],
+                        'othernames' => $data['othernames'],
+                        'fullname' => trim(
+                            $data['surname'] . ' ' . $data['othernames']
+                        ),
+                        'email' => $data['email'],
+                        'phone' => $data['phone'],
+                        'role' => $role,
+                        'status' => 'active',
+                        'password' => Hash::make($password),
+                    ]);
+
+                    $admin->save();
+
+                    $admin->notifyNow(
+                        new AdminCreationNotification([
+                            'name' => $data['othernames'],
+                            'email' => $data['email'],
+                            'password' => $password,
+                        ])
+                    );
+                }
+            );
+        } catch (Throwable $exception) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Registration failed. Check the database and email configuration.',
             ], 500);
         }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Account created. Check your email for your login details.',
+        ], 201);
     }
 
-    //permitting super admin to add other admins
-    public function addnewuser(Request $request){
-        try{
+    /*
+    |--------------------------------------------------------------------------
+    | Change Admin Role
+    |--------------------------------------------------------------------------
+    */
 
-            $rules = [
-                'surname'       =>'required|string',
-                'othernames'    =>'required|string',
-                'email'         =>'required|email',
-                'role'          =>'required|string',
-                'phone'         =>'required|string'
-            ];
+    public function changerole(Request $request)
+    {
+        $currentAdmin = $request->user();
 
-            $validation=Validator::make(request()->all(),$rules);
+        if (
+            !($currentAdmin instanceof Admin) ||
+            $currentAdmin->role !== 'super_admin'
+        ) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Only a Super Admin can change admin roles.',
+            ], 403);
+        }
 
-            if($validation->fails()){
-                return response()->json([
-                    'status'    =>'failed',
-                    'message'   =>$validation->errors()->first()
-                ],422);
-            }
+        $validator = Validator::make($request->all(), [
+            'admin' => ['required', 'string'],
+            'role' => ['required', Rule::in(['admin', 'super_admin'])],
+        ]);
 
-            $uuid = request()->input('uuid');
-            // $superadmin=auth()->guard('admin')->user()->role;
-            $superadmin = Admin::query()->where('uuid',$uuid)->first();
-            if($superadmin->role !=='super_admin'){
-                return response()->json([
-                    'status'         =>'failed',
-                    'message'       =>'You are not a super admin'
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => $validator->errors()->first(),
+            ], 422);
+        }
 
-                ],403);
+        $admin = Admin::where('uuid', $request->input('admin'))->first();
 
-            }
+        if (!$admin) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Admin not found.',
+            ], 404);
+        }
 
+        if ($admin->uuid === $currentAdmin->uuid) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'You cannot change your own role.',
+            ], 403);
+        }
 
-            //generate a random password for the new admin
-            $password = Keygen::numeric(8)->prefix('ADM')->generate();
+        $admin->role = $request->input('role');
+        $admin->save();
 
-            //creating of new admin
-            $newadmin = Admin::create([
-                'surname'         =>request()->surname,
-                'othernames'      =>request()->othernames,
-                'fullname'        =>request()->surname.' '.request()->othernames,
-                'email'           =>request()->email,
-                'phone'           =>request()->phone,
-                'role'            =>request()->role,
-                'remember_token'  =>Str::random(10),
-                'password'        =>Hash::make($password),
-                'uuid'            =>Uuid::uuid4()->toString(),
+        try {
+            $admin->notifyNow(
+                new AdminRoleChangedNotification([
+                    'name' => $admin->othernames,
+                    'role' => $admin->role === 'super_admin'
+                        ? 'Super Admin'
+                        : 'Admin',
+                ])
+            );
+        } catch (Throwable $exception) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Role updated, but the notification email could not be sent.',
             ]);
-
-            //notify newadmin about account creation
-            if(!$newadmin){
-                return response()->json([
-                    'status'    =>'failed',
-                    'message'   =>'something went wrong admin could not be created'
-                ],402);
-            }
-
-            $mail_details = [
-                'name'      =>request()->othernames,
-                'email'     =>request()->email,
-                'password'  => $password,
-                'url'       =>'www.greenhaven/adminportal'
-            ];
-
-            $newadmin->notify(new AdminCreationNotification($mail_details));
-            return response()->json([
-                'status'    =>'success',
-                'message'   =>'new admin created successfully'
-            ],200);
-
-        }catch(\Exception $e){
-            return response()->json([
-                'status'    =>'failed',
-                'message'   =>$e->getMessage()
-            ],500);
         }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Admin role updated successfully.',
+        ]);
     }
 
-    public function changerole(Request $request){ //role change of an admin
+    /*
+    |--------------------------------------------------------------------------
+    | Admin Profile
+    |--------------------------------------------------------------------------
+    */
 
-        try{
-            $rules = [
-                'uuid' => 'required|string',
-                'admin' => 'required|string',
-                'role' => 'required|string'
-            ];
+    public function profile(Request $request, $uuid)
+    {
+        $currentAdmin = $request->user();
 
-
-            $validation=Validator::make(request()->all(), $rules);
-
-            if($validation->fails()){
-                return response()->json([
-                    'status'    =>'failed',
-                    'message'   =>$validation->errors()->first()
-                ],422);
-            }
-
-            $uuid = request()->input('uuid');  //adding the login-user uuid in other to validate the status
-            $AdminUuid = request()->input('admin'); //adding the uuid to find the particular admin wish to update
-
-            $loggedInUser = Admin::query()->where('uuid', $uuid)->first();
-
-
-            if($loggedInUser->role =='super_admin'){
-
-                $toSuperAdmin = Admin::where('uuid', $AdminUuid)->first();
-                $status = $toSuperAdmin->update([
-                    'role' => request()->role
-                ]);
-                // $status -> save();
-
-                    $role =request()->role;
-                    $roletext = null;
-                    if($role=='super_admin'){
-                        $roletext = 'Super Admin';
-                    } else {
-                        $roletext = 'Admin';
-                    }
-                $mail_details = [
-                    'name'      =>$toSuperAdmin->othernames,
-                    'email'     =>$toSuperAdmin->email,
-                    'role'      =>$roletext
-                ];
-
-                $toSuperAdmin->notify(new AdminRoleChangedNotification($mail_details));
-                return response()->json([
-                    'status'    =>'success',
-                    'message'   =>'admin updated successfully'
-                ],200);
-
-                      return response()->json([
-                        'status'    =>'success',
-                        'message'   =>'Admin role updated successfully']);
-             }else{
-                      return response()->json([
-                        'status'    =>'failed',
-                        'message'   =>'you are not eligible for this action'
-                      ],200);
-            }
-        }catch(\Exception $e){
+        if (
+            !($currentAdmin instanceof Admin) ||
+            (
+                $currentAdmin->role !== 'super_admin' &&
+                $currentAdmin->uuid !== $uuid
+            )
+        ) {
             return response()->json([
-                'status'    =>'failed',
-                'message'   =>$e->getMessage()
-            ],500);
+                'status' => 'failed',
+                'message' => 'Forbidden.',
+            ], 403);
         }
+
+        $admin = Admin::where('uuid', $uuid)->first();
+
+        if (!$admin) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Admin not found.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Admin profile fetched successfully.',
+            'data' => $admin,
+        ]);
     }
-
-        public function profile($uuid)
-        {
-            try {
-
-                $admin = Admin::where('uuid', $uuid)->first();
-
-                if (!$admin) {
-                    return response()->json([
-                        'status' => 'failed',
-                        'message' => 'Admin not found'
-                    ],404);
-                }
-
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Admin profile fetched successfully', 
-                    'data' => $admin
-                ]);
-
-            } catch (\Exception $e) {
-
-                return response()->json([
-                    'status' => 'failed',
-                    'message' => $e->getMessage()
-                ],500);
-
-            }
-        }
-
-
 }
