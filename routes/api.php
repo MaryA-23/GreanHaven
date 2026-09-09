@@ -196,7 +196,6 @@ Route::prefix('admin')->group(function () {
 
         Route::get('/profile/{uuid}', [AdminController::class, 'profile']);
 
-        // Existing tenant-user endpoints.
         Route::post('/users', [AdminUserController::class, 'index']);
         Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
     });
@@ -208,11 +207,16 @@ Route::prefix('admin')->group(function () {
     ])->group(function () {
         Route::get('/accounts', [AdminAccountController::class, 'index']);
 
+        Route::patch(
+            '/accounts/{uuid}',
+            [AdminAccountController::class, 'update']
+        );
+
         Route::post('/register', [AdminController::class, 'addnewuser']);
 
         Route::post(
             '/change_admin_role',
-            [AdminController::class, 'changerole']
+            [AdminAccountController::class, 'changeRole']
         );
     });
 });
