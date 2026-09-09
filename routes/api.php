@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminAccountController;
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\AdminTenantController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Api\AuthController;
@@ -40,7 +41,7 @@ Route::prefix('tenant')->group(function () {
     );
 });
 
-// Tenant application: product creation and management
+// Tenant application
 Route::prefix('tenant')
     ->middleware(['auth:sanctum', 'role:company'])
     ->group(function () {
@@ -52,7 +53,6 @@ Route::prefix('tenant')
         Route::delete('/products/{id}', [ProductController::class, 'destroyTenantProduct']);
         Route::patch('/products/{id}/stock', [ProductController::class, 'updateTenantStock']);
 
-        // Tenants may only read master categories.
         Route::get('/categories', [CategoryController::class, 'tenantIndex']);
 
         Route::get('/settings', [TenantSettingsController::class, 'show']);
@@ -68,18 +68,16 @@ Route::prefix('tenant')
         Route::delete('/notifications/{id}', [TenantNotificationController::class, 'destroy']);
     });
 
-// Product browsing.
-// All product-write endpoints are under /tenant/products.
+// Product browsing. Product writes remain under /tenant/products.
 Route::prefix('products')->group(function () {
     Route::get('/', [ProductController::class, 'index']);
     Route::get('/{id}', [ProductController::class, 'show']);
 });
 
-// Master category browsing
+// Master categories
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/categories/{id}', [CategoryController::class, 'show']);
 
-// Both Admin and Super Admin manage master categories.
 Route::middleware([
     'auth:sanctum',
     'role:admin,super_admin',
@@ -105,7 +103,6 @@ Route::prefix('orders')
             Route::get('/company/{id}', [OrderController::class, 'show']);
         });
 
-        // Controller methods also check authorization.
         Route::patch('/{id}/processing', [OrderController::class, 'markAsProcessing']);
         Route::patch('/{id}/completed', [OrderController::class, 'markAsCompleted']);
 
@@ -161,7 +158,7 @@ Route::prefix('reports')
         });
     });
 
-// Admin authentication and application
+// Administration
 Route::prefix('admin')->group(function () {
     Route::post('/setup', [AdminController::class, 'register'])
         ->middleware('throttle:5,1');
@@ -179,6 +176,10 @@ Route::prefix('admin')->group(function () {
     ])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
 
+        Route::get('/tenants', [AdminTenantController::class, 'index']);
+        Route::get('/tenants/{id}', [AdminTenantController::class, 'show'])
+            ->whereNumber('id');
+
         Route::get('/profile', [AdminController::class, 'myProfile']);
         Route::put('/profile', [AdminController::class, 'updateProfile']);
 
@@ -193,7 +194,6 @@ Route::prefix('admin')->group(function () {
         Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
     });
 
-    // Only Super Admin may manage administrator accounts.
     Route::middleware([
         'auth:sanctum',
         'role:super_admin',
