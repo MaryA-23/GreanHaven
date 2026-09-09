@@ -40,7 +40,7 @@ Route::prefix('tenant')->group(function () {
     );
 });
 
-// Tenant application
+// Tenant application: product creation and management
 Route::prefix('tenant')
     ->middleware(['auth:sanctum', 'role:company'])
     ->group(function () {
@@ -52,6 +52,7 @@ Route::prefix('tenant')
         Route::delete('/products/{id}', [ProductController::class, 'destroyTenantProduct']);
         Route::patch('/products/{id}/stock', [ProductController::class, 'updateTenantStock']);
 
+        // Tenants may only read master categories.
         Route::get('/categories', [CategoryController::class, 'tenantIndex']);
 
         Route::get('/settings', [TenantSettingsController::class, 'show']);
@@ -67,29 +68,21 @@ Route::prefix('tenant')
         Route::delete('/notifications/{id}', [TenantNotificationController::class, 'destroy']);
     });
 
-// Products
+// Product browsing.
+// All product-write endpoints are under /tenant/products.
 Route::prefix('products')->group(function () {
     Route::get('/', [ProductController::class, 'index']);
     Route::get('/{id}', [ProductController::class, 'show']);
-
-    Route::middleware([
-        'auth:sanctum',
-        'role:admin,super_admin',
-    ])->group(function () {
-        Route::post('/', [ProductController::class, 'store']);
-        Route::patch('/{id}', [ProductController::class, 'update']);
-        Route::delete('/{id}', [ProductController::class, 'destroy']);
-        Route::patch('/{id}/restore', [ProductController::class, 'restore']);
-    });
 });
 
-// Master categories
+// Master category browsing
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/categories/{id}', [CategoryController::class, 'show']);
 
+// Both Admin and Super Admin manage master categories.
 Route::middleware([
     'auth:sanctum',
-    'role:super_admin',
+    'role:admin,super_admin',
 ])->group(function () {
     Route::post('/categories', [CategoryController::class, 'store']);
     Route::put('/categories/{id}', [CategoryController::class, 'update']);
@@ -112,7 +105,7 @@ Route::prefix('orders')
             Route::get('/company/{id}', [OrderController::class, 'show']);
         });
 
-        // OrderController also checks authorization for these actions.
+        // Controller methods also check authorization.
         Route::patch('/{id}/processing', [OrderController::class, 'markAsProcessing']);
         Route::patch('/{id}/completed', [OrderController::class, 'markAsCompleted']);
 
@@ -200,7 +193,7 @@ Route::prefix('admin')->group(function () {
         Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
     });
 
-    // Super Admin account management
+    // Only Super Admin may manage administrator accounts.
     Route::middleware([
         'auth:sanctum',
         'role:super_admin',
