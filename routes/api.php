@@ -18,6 +18,8 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TenantNotificationController;
 use App\Http\Controllers\TenantSettingsController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Admin\AdminOperationsController;
+
 
 // Customer authentication
 Route::post('/register', [AuthController::class, 'register']);
@@ -226,8 +228,33 @@ Route::middleware('auth:sanctum')
         Route::post('/checkout', [CartController::class, 'checkout']);
     });
 
-// Email verification
-Route::get(
-    '/email/verify/{id}/{hash}',
-    [PublicVerifyEmailController::class, '__invoke']
-)->name('verification.verify');
+    // Email verification
+    Route::get(
+        '/email/verify/{id}/{hash}',
+        [PublicVerifyEmailController::class, '__invoke']
+    )->name('verification.verify');
+
+    Route::middleware([
+        'auth:sanctum',
+        'role:admin,super_admin',
+    ])->group(function () {
+        Route::get(
+            '/tenants/{id}/status',
+            [AdminOperationsController::class, 'status']
+        )->whereNumber('id');
+
+        Route::patch(
+            '/tenants/{id}/status',
+            [AdminOperationsController::class, 'updateStatus']
+        )->whereNumber('id');
+
+        Route::get(
+            '/notifications',
+            [AdminOperationsController::class, 'notifications']
+        );
+
+        Route::patch(
+            '/notifications/{id}/read',
+            [AdminOperationsController::class, 'readNotification']
+        )->whereNumber('id');
+    });
