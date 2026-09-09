@@ -16,17 +16,11 @@ use Throwable;
 
 class AdminController extends Controller
 {
-    /*
-    |--------------------------------------------------------------------------
-    | Login
-    |--------------------------------------------------------------------------
-    */
-
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'email' => ['required', 'email'],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => ['required', 'string'],
         ]);
 
         if ($validator->fails()) {
@@ -65,16 +59,6 @@ class AdminController extends Controller
         ]);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | First Super Admin Registration
-    |--------------------------------------------------------------------------
-    |
-    | Only available locally and only before a Super Admin exists.
-    | The role is assigned by the server.
-    |
-    */
-
     public function register(Request $request)
     {
         if (
@@ -87,7 +71,6 @@ class AdminController extends Controller
             ], 403);
         }
 
-        // Prevent simultaneous first-account registrations.
         $lock = Cache::lock('greenhaven-first-super-admin', 120);
 
         if (!$lock->get()) {
@@ -110,12 +93,6 @@ class AdminController extends Controller
             $lock->release();
         }
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Create Additional Admins
-    |--------------------------------------------------------------------------
-    */
 
     public function addnewuser(Request $request)
     {
@@ -145,11 +122,26 @@ class AdminController extends Controller
         return $this->createAdmin($request, $request->input('role'));
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | Shared Account Creation
-    |--------------------------------------------------------------------------
-    */
+    // Seven characters, including at least one letter and one number.
+    // Excludes I, L, O, 0 and 1 to make the password easier to read.
+    private function generatePassword(): string
+    {
+        $characters = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+        $lastIndex = strlen($characters) - 1;
+
+        do {
+            $password = '';
+
+            for ($index = 0; $index < 7; $index++) {
+                $password .= $characters[random_int(0, $lastIndex)];
+            }
+        } while (
+            !preg_match('/[A-Z]/', $password) ||
+            !preg_match('/[2-9]/', $password)
+        );
+
+        return $password;
+    }
 
     private function createAdmin(Request $request, string $role)
     {
@@ -184,10 +176,11 @@ class AdminController extends Controller
         }
 
         $data = $validator->validated();
-        $password = Str::random(20);
         $admin = new Admin();
 
         try {
+            $password = $this->generatePassword();
+
             $admin->getConnection()->transaction(
                 function () use ($admin, $data, $password, $role) {
                     $admin->forceFill([
@@ -227,12 +220,6 @@ class AdminController extends Controller
             'message' => 'Account created. Check your email for your login details.',
         ], 201);
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Change Admin Role
-    |--------------------------------------------------------------------------
-    */
 
     public function changerole(Request $request)
     {
@@ -300,12 +287,6 @@ class AdminController extends Controller
             'message' => 'Admin role updated successfully.',
         ]);
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Admin Profile
-    |--------------------------------------------------------------------------
-    */
 
     public function profile(Request $request, $uuid)
     {
