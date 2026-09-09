@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminAccountController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -185,7 +186,6 @@ Route::prefix('admin')->group(function () {
     ])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
 
-        // Signed-in admin's own profile.
         Route::get('/profile', [AdminController::class, 'myProfile']);
         Route::put('/profile', [AdminController::class, 'updateProfile']);
 
@@ -194,19 +194,26 @@ Route::prefix('admin')->group(function () {
             [AdminController::class, 'changePassword']
         )->middleware('throttle:5,1');
 
-        // Existing profile lookup.
         Route::get('/profile/{uuid}', [AdminController::class, 'profile']);
 
+        // Existing tenant-user endpoints.
         Route::post('/users', [AdminUserController::class, 'index']);
         Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
     });
 
+    // Super Admin account management
     Route::middleware([
         'auth:sanctum',
         'role:super_admin',
     ])->group(function () {
+        Route::get('/accounts', [AdminAccountController::class, 'index']);
+
         Route::post('/register', [AdminController::class, 'addnewuser']);
-        Route::post('/change_admin_role', [AdminController::class, 'changerole']);
+
+        Route::post(
+            '/change_admin_role',
+            [AdminController::class, 'changerole']
+        );
     });
 });
 
