@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Laravel\Sanctum\PersonalAccessToken;
 use Throwable;
 
 class AdminController extends Controller
@@ -56,6 +57,34 @@ class AdminController extends Controller
             'access_token' => $token,
             'token_type' => 'Bearer',
             'admin' => $admin,
+        ]);
+    }
+
+    public function logout(Request $request)
+    {
+        $admin = $request->user();
+
+        if (!($admin instanceof Admin)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Admin account required.',
+            ], 403);
+        }
+
+        $token = $admin->currentAccessToken();
+
+        if (!($token instanceof PersonalAccessToken)) {
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'A Bearer token is required to sign out.',
+            ], 400);
+        }
+
+        $token->delete();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Logged out successfully.',
         ]);
     }
 
@@ -122,8 +151,6 @@ class AdminController extends Controller
         return $this->createAdmin($request, $request->input('role'));
     }
 
-    // Seven characters, including at least one letter and one number.
-    // Excludes I, L, O, 0 and 1 to make the password easier to read.
     private function generatePassword(): string
     {
         $characters = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -233,7 +260,7 @@ class AdminController extends Controller
                 'status' => 'failed',
                 'message' => 'Only a Super Admin can change admin roles.',
             ], 403);
-        }
+               }
 
         $validator = Validator::make($request->all(), [
             'admin' => ['required', 'string'],
