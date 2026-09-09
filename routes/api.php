@@ -111,7 +111,7 @@ Route::prefix('orders')
             Route::get('/company/{id}', [OrderController::class, 'show']);
         });
 
-        // Authorization for these actions is also checked in the controller.
+        // OrderController also checks authorization for these actions.
         Route::patch('/{id}/processing', [OrderController::class, 'markAsProcessing']);
         Route::patch('/{id}/completed', [OrderController::class, 'markAsCompleted']);
 
@@ -174,7 +174,6 @@ Route::prefix('admin')->group(function () {
 
     Route::post('/login', [AdminController::class, 'login']);
 
-    // An authenticated admin can sign out even if their role has changed.
     Route::middleware('auth:sanctum')->post(
         '/logout',
         [AdminController::class, 'logout']
@@ -185,7 +184,19 @@ Route::prefix('admin')->group(function () {
         'role:admin,super_admin',
     ])->group(function () {
         Route::get('/dashboard', [DashboardController::class, 'index']);
+
+        // Signed-in admin's own profile.
+        Route::get('/profile', [AdminController::class, 'myProfile']);
+        Route::put('/profile', [AdminController::class, 'updateProfile']);
+
+        Route::put(
+            '/profile/password',
+            [AdminController::class, 'changePassword']
+        )->middleware('throttle:5,1');
+
+        // Existing profile lookup.
         Route::get('/profile/{uuid}', [AdminController::class, 'profile']);
+
         Route::post('/users', [AdminUserController::class, 'index']);
         Route::get('/users/{user_id}', [AdminUserController::class, 'show']);
     });
