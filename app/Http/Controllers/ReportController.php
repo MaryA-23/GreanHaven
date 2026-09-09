@@ -10,91 +10,157 @@ class ReportController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth:sanctum'); // Only authenticated users
-        $this->middleware('can:viewReports'); // Admin/superadmin role
+        $this->middleware('auth:sanctum');
+
+        $this->middleware('role:admin,super_admin')
+            ->only(['ordersSummary', 'paymentsSummary']);
+
+        $this->middleware('role:admin,super_admin,company,user')
+            ->only(['salesSummary']);
     }
 
-    // Orders summary with optional date/company filter
-     public function ordersSummary(Request $request)
+    public function ordersSummary(Request $request)
     {
-        $user = $request->user();
+        $dates = $this->validatedDates($request);
+
         $query = Order::query();
 
-        // Restrict based on role
-        if ($user->role === 'user') {
-            $query->where('user_id', $user->id);
+        if (!empty($dates['date_from'])) {
+            $query->whereDate(
+                'created_at',
+                '>=',
+                $dates['date_from']
+            );
         }
 
-        if ($request->date_from) {
-            $query->whereDate('created_at', '>=', $request->date_from);
-        }
-
-        if ($request->date_to) {
-            $query->whereDate('created_at', '<=', $request->date_to);
-        }
-
-        $summary = [
-            'total_orders' => $query->count(),
-            'pending' => (clone $query)->where('status', 'pending')->count(),
-            'confirmed' => (clone $query)->where('status', 'confirmed')->count(),
-            'delivered' => (clone $query)->where('status', 'delivered')->count(),
-        ];
-
-        return response()->json($summary);
-    }
-
-    // Sales summary with optional date/company filter
-     public function salesSummary(Request $request)
-    {
-        $user = $request->user();
-        $query = Order::query();
-
-        if ($user->role === 'user') {
-            $query->where('user_id', $user->id);
-        }
-
-        if ($request->date_from) {
-            $query->whereDate('created_at', '>=', $request->date_from);
-        }
-
-        if ($request->date_to) {
-            $query->whereDate('created_at', '<=', $request->date_to);
+        if (!empty($dates['date_to'])) {
+            $query->whereDate(
+                'created_at',
+                '<=',
+                $dates['date_to']
+            );
         }
 
         return response()->json([
-            'total_sales' => $query->sum('total_price'),
-            'total_orders' => $query->count(),
+            'total_orders' => (clone $query)->count(),
+
+            'pending' => (clone $query)
+                ->where('status', 'pending')
+                ->count(),
+
+            'confirmed' => (clone $query)
+                ->where('status', 'confirmed')
+                ->count(),
+
+            'delivered' => (clone $query)
+                ->where('status', 'delivered')
+                ->count(),
         ]);
     }
 
-
-    // Payments summary with optional date/company filter
-     public function paymentsSummary(Request $request)
+    public function salesSummary(Request $request)
     {
+        $dates = $this->validatedDates($request);
         $user = $request->user();
-        $query = Payment::query();
+
+        $query = Order::query();
 
         if ($user->role === 'user') {
-            $query->whereHas('order', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            });
+            $query->where('user_id', $user->id);
+        } elseif ($user->role === 'company') {
+            if (!$user->company_id) {
+                return response()->json([
+                    'message' => 'Company account required.',
+                ], 403);
+            }
+
+            $query->where('company_id', $user->company_id);
         }
 
-        if ($request->date_from) {
-            $query->whereDate('created_at', '>=', $request->date_from);
+        if (!empty($dates['date_from'])) {
+            $query->whereDate(
+                'created_at',
+                '>=',
+                $dates['date_from']
+            );
         }
 
-        if ($request->date_to) {
-            $query->whereDate('created_at', '<=', $request->date_to);
+        if (!empty($dates['date_to'])) {
+            $query->whereDate(
+                'created_at',
+                '<=',
+                $dates['date_to']
+            );
         }
 
-        $summary = [
-            'paid' => (clone $query)->where('status', 'paid')->count(),
-            'unpaid' => (clone $query)->where('status', 'unpaid')->count(),
-            'pending' => (clone $query)->where('status', 'pending')->count(),
-            'failed' => (clone $query)->where('status', 'failed')->count(),
+        // Preserves the existing report definition:
+        // total order value for the selected period.
+        return response()->json([
+            'total_sales' => (float) (clone $query)
+                ->sum('total_price'),
+
+            'total_orders' => (clone $query)->count(),
+        ]);
+    }
+
+    public function paymentsSummary(Request $request)
+    {
+        $dates = $this->validatedDates($request);
+
+        $query = Payment::query();
+
+        if (!empty($dates['date_from'])) {
+            $query->whereDate(
+                'created_at',
+                '>=',
+                $dates['date_from']
+            );
+        }
+
+        if (!empty($dates['date_to'])) {
+            $query->whereDate(
+                'created_at',
+                '<=',
+                $dates['date_to']
+            );
+        }
+
+        return response()->json([
+            'paid' => (clone $query)
+                ->where('status', 'paid')
+                ->count(),
+
+            'unpaid' => (clone $query)
+                ->where('status', 'unpaid')
+                ->count(),
+
+            'pending' => (clone $query)
+                ->where('status', 'pending')
+                ->count(),
+
+            'failed' => (clone $query)
+                ->where('status', 'failed')
+                ->count(),
+        ]);
+    }
+
+    private function validatedDates(Request $request): array
+    {
+        $endDateRules = [
+            'nullable',
+            'date_format:Y-m-d',
         ];
 
-        return response()->json($summary);
+        if ($request->filled('date_from')) {
+            $endDateRules[] = 'after_or_equal:date_from';
+        }
+
+        return $request->validate([
+            'date_from' => [
+                'nullable',
+                'date_format:Y-m-d',
+            ],
+            'date_to' => $endDateRules,
+        ]);
     }
 }
