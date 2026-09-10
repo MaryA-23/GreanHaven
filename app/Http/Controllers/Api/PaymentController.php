@@ -31,7 +31,7 @@ class PaymentController extends Controller
             'order.company'
         ]);// eager load order
 
-        if ($user->role === 'admin') {
+        if (in_array($user->role, ['admin', 'super_admin'], true)) {
             // Admin sees all payments
         } elseif ($user->role === 'company') {
             $query->whereHas('order', function ($q) use ($user) {
@@ -488,7 +488,7 @@ class PaymentController extends Controller
      */
     public function update(Request $request, Payment $payment): JsonResponse
     {
-        if ($request->user()->role !== 'admin') {
+        if (!in_array($request->user()->role, ['admin', 'super_admin'], true)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
@@ -528,7 +528,7 @@ class PaymentController extends Controller
      */
     public function destroy(Request $request, Payment $payment): JsonResponse
     {
-            if ($request->user()->role !== 'admin') {
+            if (!in_array($request->user()->role, ['admin', 'super_admin'], true)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
         $payment->delete();
