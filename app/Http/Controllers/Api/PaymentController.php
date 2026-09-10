@@ -150,23 +150,6 @@ class PaymentController extends Controller
                 'user_email' => $order->user->email,
             ]);
 
-            try {
-                Mail::send('emails.payment_pending', [
-                    'order' => $order,
-                    'payment' => $payment,
-                    'paymentUrl' => $paymentUrl,
-                ], function ($message) use ($order) {
-                    $message->to($order->user->email);
-                    $message->subject('Greenhaven Order Payment Details');
-                });
-            } catch (\Exception $mailException) {
-                Log::error('Payment email failed', [
-                    'message' => $mailException->getMessage(),
-                    'order_id' => $order->id,
-                    'payment_id' => $payment->id,
-                ]);
-            }
-
             return response()->json([
                 'success' => true,
                 'message' => 'Payment link generated.',

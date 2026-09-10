@@ -4,94 +4,288 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment Successful - GreenHaven</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
-            line-height: 1.6; 
-            color: #333; 
-            background: #f4f4f4; 
-            padding: 20px; 
-        }
-        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        .header { background: linear-gradient(135deg, #28a745, #20c997); color: white; padding: 40px 30px; text-align: center; }
-        .header h1 { font-size: 28px; margin-bottom: 10px; }
-        .content { padding: 40px 30px; }
-        .order-card { background: #f8f9fa; border-radius: 8px; padding: 25px; margin: 25px 0; border-left: 5px solid #28a745; }
-        .order-id { font-size: 24px; font-weight: 700; color: #28a745; margin-bottom: 15px; }
-        .price { font-size: 32px; font-weight: 800; color: #28a745; }
-        .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
-        .detail { text-align: center; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .detail-label { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-        .detail-value { font-size: 20px; font-weight: 600; color: #333; margin-top: 5px; }
-        .button { 
-            display: inline-block; 
-            background: #007bff; 
-            color: white; 
-            padding: 15px 40px; 
-            text-decoration: none; 
-            border-radius: 50px; 
-            font-weight: 600; 
-            font-size: 16px; 
-            margin: 25px 10px 0 0;
-            box-shadow: 0 5px 15px rgba(0,123,255,0.3);
-        }
-        .button:hover { background: #0056b3; }
-        .footer { background: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #eee; }
-        .footer p { color: #666; margin: 5px 0; font-size: 14px; }
-        @media (max-width: 600px) { .details-grid { grid-template-columns: 1fr; } }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <!-- HEADER -->
-        <div class="header">
-            <h1>🎉 Payment Successful!</h1>
-            <p>Your GreenHaven order is confirmed</p>
-        </div>
 
-        <!-- CONTENT -->
-        <div class="content">
-            <div class="order-card">
-                <div class="order-id">Order #{{ $order->id }}</div>
-                <div style="font-size: 18px; margin-bottom: 20px;">
-                    Thank you for your purchase, {{ $user->name ?? 'Customer' }}!
-                </div>
-                
-                <div class="details-grid">
-                <div class="detail">
-                    <div class="detail-label">Total Paid</div>
-                    <div class="detail-value price">GHS {{ number_format($order->total_price, 2) }}</div>
-                </div>
-                <div class="detail">
-                    <div class="detail-label">Order Date</div>
-                    <div class="detail-value">{{ $order->created_at->format('M d, Y') }}</div>
-                </div>
-                </div>
+<body style="
+    margin:0;
+    padding:0;
+    background-color:#f3f6f4;
+    font-family:Arial, Helvetica, sans-serif;
+    color:#1f2937;
+">
 
-             {{-- <div style="text-align: center; margin: 30px 0;">
-                <a href="{{ config('app.frontend_url') }}/orders/{{ $order->id }}" class="button">
-                    View Order Details
-                </a>
-                <a href="{{ config('app.frontend_url') }}" class="button" style="background: #6c757d;">
-                    Continue Shopping
-                </a>
-                </div> --}}
-                <div style="text-align: center; margin: 30px 0;">
-                <a href="{{ url('/') }}" class="button">
-                    Visit GreenHaven
-                </a>
-            </div>
-            
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+        <td align="center" style="padding:40px 15px;">
 
-        </div>
+            <table
+                width="100%"
+                cellpadding="0"
+                cellspacing="0"
+                role="presentation"
+                style="
+                    max-width:600px;
+                    background:#ffffff;
+                    border-radius:16px;
+                    overflow:hidden;
+                    box-shadow:0 8px 25px rgba(0,0,0,0.08);
+                "
+            >
 
-        <!-- FOOTER -->
-        <div class="footer">
-            <p><strong>GreenHaven Team</strong></p>
-            <p>Questions? Reply to this email or contact support@greenhaven.com</p>
-            <p style="font-size: 12px;">© 2026 GreenHaven. All rights reserved.</p>
-        </div>
-    </div>
+                <!-- Header -->
+                <tr>
+                    <td
+                        align="center"
+                        style="
+                            background:#14532d;
+                            padding:35px 25px;
+                            color:#ffffff;
+                        "
+                    >
+                        <div
+                            style="
+                                width:58px;
+                                height:58px;
+                                line-height:58px;
+                                margin:0 auto 15px;
+                                border-radius:50%;
+                                background:#ffffff;
+                                color:#15803d;
+                                font-size:30px;
+                                font-weight:700;
+                            "
+                        >
+                            ✓
+                        </div>
+
+                        <div
+                            style="
+                                font-size:28px;
+                                font-weight:700;
+                            "
+                        >
+                            Payment Successful
+                        </div>
+
+                        <div
+                            style="
+                                margin-top:7px;
+                                font-size:14px;
+                                color:#bbf7d0;
+                            "
+                        >
+                            Your GreenHaven order has been confirmed
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Content -->
+                <tr>
+                    <td style="padding:40px 35px;">
+
+                        <h2
+                            style="
+                                margin:0 0 12px;
+                                font-size:22px;
+                                color:#14532d;
+                            "
+                        >
+                            Thank you, {{ $user->first_name ?? 'Customer' }}
+                        </h2>
+
+                        <p
+                            style="
+                                margin:0 0 28px;
+                                font-size:16px;
+                                line-height:1.7;
+                                color:#4b5563;
+                            "
+                        >
+                            We have received your payment successfully.
+                            Your order is now confirmed.
+                        </p>
+
+                        <!-- Payment Summary -->
+                        <table
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            role="presentation"
+                            style="
+                                background:#f0fdf4;
+                                border:1px solid #dcfce7;
+                                border-radius:12px;
+                                margin-bottom:30px;
+                            "
+                        >
+                            <tr>
+                                <td style="padding:25px;">
+
+                                    <table
+                                        width="100%"
+                                        cellpadding="0"
+                                        cellspacing="0"
+                                        role="presentation"
+                                    >
+                                        <tr>
+                                            <td
+                                                style="
+                                                    padding-bottom:18px;
+                                                    font-size:14px;
+                                                    color:#6b7280;
+                                                "
+                                            >
+                                                Order Number
+                                            </td>
+
+                                            <td
+                                                align="right"
+                                                style="
+                                                    padding-bottom:18px;
+                                                    font-size:15px;
+                                                    font-weight:700;
+                                                    color:#14532d;
+                                                "
+                                            >
+                                                #{{ $order->id }}
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td
+                                                style="
+                                                    padding-bottom:18px;
+                                                    font-size:14px;
+                                                    color:#6b7280;
+                                                "
+                                            >
+                                                Order Date
+                                            </td>
+
+                                            <td
+                                                align="right"
+                                                style="
+                                                    padding-bottom:18px;
+                                                    font-size:15px;
+                                                    font-weight:600;
+                                                    color:#374151;
+                                                "
+                                            >
+                                                {{ $order->created_at->format('d M Y') }}
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td
+                                                style="
+                                                    padding-top:18px;
+                                                    border-top:1px solid #dcfce7;
+                                                    font-size:14px;
+                                                    font-weight:600;
+                                                    color:#374151;
+                                                "
+                                            >
+                                                Total Paid
+                                            </td>
+
+                                            <td
+                                                align="right"
+                                                style="
+                                                    padding-top:18px;
+                                                    border-top:1px solid #dcfce7;
+                                                    font-size:24px;
+                                                    font-weight:700;
+                                                    color:#15803d;
+                                                "
+                                            >
+                                                GHS {{ number_format($order->total_price, 2) }}
+                                            </td>
+                                        </tr>
+                                    </table>
+
+                                </td>
+                            </tr>
+                        </table>
+
+                        <!-- Status -->
+                        <table
+                            width="100%"
+                            cellpadding="0"
+                            cellspacing="0"
+                            role="presentation"
+                            style="
+                                margin-bottom:30px;
+                                background:#ecfdf5;
+                                border-radius:10px;
+                            "
+                        >
+                            <tr>
+                                <td
+                                    align="center"
+                                    style="
+                                        padding:15px;
+                                        font-size:14px;
+                                        font-weight:600;
+                                        color:#166534;
+                                    "
+                                >
+                                    ✓ Payment received and order confirmed
+                                </td>
+                            </tr>
+                        </table>
+
+                        <p
+                            style="
+                                margin:0;
+                                font-size:14px;
+                                line-height:1.7;
+                                color:#6b7280;
+                            "
+                        >
+                            Please keep this email as confirmation of your payment.
+                        </p>
+
+                    </td>
+                </tr>
+
+                <!-- Footer -->
+                <tr>
+                    <td
+                        align="center"
+                        style="
+                            background:#f9fafb;
+                            padding:25px;
+                            border-top:1px solid #e5e7eb;
+                        "
+                    >
+                        <p
+                            style="
+                                margin:0 0 6px;
+                                font-size:14px;
+                                font-weight:600;
+                                color:#14532d;
+                            "
+                        >
+                            GreenHaven Team
+                        </p>
+
+                        <p
+                            style="
+                                margin:0;
+                                font-size:12px;
+                                color:#9ca3af;
+                            "
+                        >
+                            © {{ date('Y') }} GreenHaven. All rights reserved.
+                        </p>
+                    </td>
+                </tr>
+
+            </table>
+
+        </td>
+    </tr>
+</table>
+
 </body>
 </html>
