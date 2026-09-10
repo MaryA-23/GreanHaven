@@ -10,9 +10,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Services\InventoryService;
+use App\Services\AdminNotificationService;
 use App\Mail\OrderCreatedMail;
 use Illuminate\Support\Facades\Mail;
-use App\Services\AdminNotificationService;
 
 class OrderController extends Controller
 {
@@ -84,7 +84,6 @@ class OrderController extends Controller
         ]);
     }
 
-
     /**
      * Customer creates an order.
      *
@@ -94,9 +93,10 @@ class OrderController extends Controller
      * One checkout can contain products
      * from only one company.
      */
-    public function store(Request $request, InventoryService $inventoryService , AdminNotificationService $adminNotificationService): JsonResponse {
+    public function store( Request $request,InventoryService $inventoryService,AdminNotificationService $adminNotificationService): JsonResponse {
 
         $user = $request->user();
+
 
         /*
         |--------------------------------------------------------------------------
@@ -521,27 +521,39 @@ class OrderController extends Controller
 
 
             DB::commit();
-            
-        try {
-        $orderForNotification = $order->fresh([
-            'company'
-        ]);
 
-        $adminNotificationService->newOrder(
-            $order->id,
-            $orderForNotification?->company?->name
-        );
 
-    } catch (\Exception $notificationException) {
+            /*
+            |--------------------------------------------------------------------------
+            | Notify Admin / Super Admin about new order
+            |--------------------------------------------------------------------------
+            */
 
-        Log::error(
-            'Admin new order notification failed',
-            [
-                'message' => $notificationException->getMessage(),
-                'order_id' => $order->id,
-            ]
-        );
-    }
+            try {
+
+                $orderForNotification = $order->fresh([
+                    'company'
+                ]);
+
+                $adminNotificationService->newOrder(
+                    $order->id,
+                    $orderForNotification?->company?->name
+                );
+
+            } catch (\Exception $notificationException) {
+
+                Log::error(
+                    'Admin new order notification failed',
+                    [
+                        'message' =>
+                            $notificationException->getMessage(),
+
+                        'order_id' =>
+                            $order->id,
+                    ]
+                );
+            }
+
 
             /*
             |--------------------------------------------------------------------------
@@ -640,10 +652,7 @@ class OrderController extends Controller
     /**
      * Show one order.
      */
-    public function show(
-        Request $request,
-        int $id
-    ): JsonResponse {
+    public function show( Request $request,int $id): JsonResponse {
 
         $user =
             $request->user();
@@ -711,10 +720,7 @@ class OrderController extends Controller
     /**
      * Customer cancels unpaid order.
      */
-    public function cancel(
-        Request $request,
-        int $id
-    ): JsonResponse {
+    public function cancel(Request $request,int $id): JsonResponse {
 
         $user =
             $request->user();
@@ -847,10 +853,7 @@ class OrderController extends Controller
      * Company/Admin:
      * Paid -> Processing
      */
-    public function markAsProcessing(
-        Request $request,
-        int $id
-    ): JsonResponse {
+    public function markAsProcessing( Request $request,int $id ): JsonResponse {
 
         $user =
             $request->user();
@@ -937,10 +940,7 @@ class OrderController extends Controller
      * Company/Admin:
      * Processing -> Completed
      */
-    public function markAsCompleted(
-        Request $request,
-        int $id
-    ): JsonResponse {
+    public function markAsCompleted(Request $request, int $id): JsonResponse {
 
         $user =
             $request->user();
@@ -1026,10 +1026,7 @@ class OrderController extends Controller
     /**
      * Admin cancels unpaid/problematic order.
      */
-    public function adminCancel(
-        Request $request,
-        int $id
-    ): JsonResponse {
+    public function adminCancel( Request $request, int $id): JsonResponse {
 
         if (
             $request->user()->role
@@ -1136,10 +1133,7 @@ class OrderController extends Controller
     /**
      * Admin expires unpaid order.
      */
-    public function adminExpire(
-        Request $request,
-        int $id
-    ): JsonResponse {
+    public function adminExpire( Request $request,int $id): JsonResponse {
 
         if (
             $request->user()->role
