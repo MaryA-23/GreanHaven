@@ -18,6 +18,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TenantNotificationController;
 use App\Http\Controllers\Admin\AdminNotificationController;
 use App\Http\Controllers\TenantSettingsController;
+use App\Http\Controllers\Admin\AdminCustomerController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -249,7 +250,12 @@ Route::prefix('admin')->group(function () {
             [AdminNotificationController::class, 'destroy']
         );
     });
-});
+
+    // Customer Management
+    Route::get('/customers', [AdminCustomerController::class, 'index']);
+    Route::get('/customers/{id}', [AdminCustomerController::class, 'show']);
+    Route::patch('/customers/{id}/status', [AdminCustomerController::class, 'updateStatus']);
+    });
 
 // Cart
 Route::middleware('auth:sanctum')
