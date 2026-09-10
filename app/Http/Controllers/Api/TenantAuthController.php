@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\User;
 use App\Mail\WelcomeMail;
+use App\Services\AdminNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -17,8 +18,10 @@ class TenantAuthController extends Controller
     /**
      * Register a new tenant/company account.
      */
-    public function register(Request $request)
-    {
+    public function register(
+        Request $request,
+        AdminNotificationService $adminNotificationService
+    ) {
         $request->validate([
             'company_name' => 'required|string|max:255',
 
@@ -57,6 +60,37 @@ class TenantAuthController extends Controller
             ]);
 
             DB::commit();
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Admin / Super Admin Notification
+            |--------------------------------------------------------------------------
+            |
+            | Tell the Admin portal that a new tenant/company has registered.
+            | This runs after the database transaction has completed.
+            |
+            */
+            try {
+
+                $adminNotificationService->newTenant(
+                    $company->id,
+                    $company->name
+                );
+
+            } catch (\Exception $notificationException) {
+
+                Log::error(
+                    'Admin new tenant notification failed',
+                    [
+                        'message' =>
+                            $notificationException->getMessage(),
+
+                        'company_id' =>
+                            $company->id,
+                    ]
+                );
+            }
 
 
             // Send verification email
@@ -107,15 +141,19 @@ class TenantAuthController extends Controller
                 ]
             );
 
-          return response()->json([
-            'success' => false,
-            'message' => 'Tenant registration failed.',
-            'error' => $e->getMessage(),
-        ], 500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Tenant registration failed.',
+                'error' => $e->getMessage(),
+            ], 500);
         }
     }
 
-        public function login(Request $request)
+
+    /**
+     * Tenant login.
+     */
+    public function login(Request $request)
     {
         $request->validate([
             'email' => 'required|email',
@@ -175,6 +213,10 @@ class TenantAuthController extends Controller
         ], 200);
     }
 
+
+    /**
+     * Tenant logout.
+     */
     public function logout(Request $request)
     {
         $request->user()
@@ -186,5 +228,4 @@ class TenantAuthController extends Controller
             'message' => 'Tenant logged out successfully.',
         ]);
     }
-
 }

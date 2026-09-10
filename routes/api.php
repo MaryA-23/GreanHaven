@@ -16,6 +16,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TenantNotificationController;
+use App\Http\Controllers\Admin\AdminNotificationController;
 use App\Http\Controllers\TenantSettingsController;
 use Illuminate\Support\Facades\Route;
 
@@ -211,6 +212,41 @@ Route::prefix('admin')->group(function () {
         Route::post(
             '/change_admin_role',
             [AdminAccountController::class, 'changeRole']
+        );
+    });
+
+     Route::middleware([
+        'auth:sanctum',
+        'role:admin,super_admin'
+    ])->group(function () {
+
+        // your existing admin routes...
+
+        Route::get('/notifications', [AdminNotificationController::class, 'index']);
+
+        Route::get(
+            '/notifications/unread-count',
+            [AdminNotificationController::class, 'unreadCount']
+        );
+
+        Route::patch(
+            '/notifications/read-all',
+            [AdminNotificationController::class, 'markAllAsRead']
+        );
+
+        Route::patch(
+            '/notifications/{id}/read',
+            [AdminNotificationController::class, 'markAsRead']
+        );
+
+        Route::delete(
+            '/notifications/clear-all',
+            [AdminNotificationController::class, 'clearAll']
+        );
+
+        Route::delete(
+            '/notifications/{id}',
+            [AdminNotificationController::class, 'destroy']
         );
     });
 });
