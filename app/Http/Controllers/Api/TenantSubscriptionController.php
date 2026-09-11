@@ -76,7 +76,7 @@ class TenantSubscriptionController extends Controller
         $callbackUrl = url('/api/tenant/subscriptions/paystack/callback');
 
         try {
-            $response = Http::withToken(config('services.paystack.secret_key'))
+            $response = Http::withToken(config('services.paystack.secret'))
                 ->post('https://api.paystack.co/transaction/initialize', [
                     'email' => $user->email,
                     'amount' => (int) round($amount * 100),
@@ -143,7 +143,7 @@ class TenantSubscriptionController extends Controller
 
     public function webhook(Request $request)
     {
-        $secret = config('services.paystack.secret_key');
+        $secret = config('services.paystack.secret');
         $signature = $request->header('x-paystack-signature');
 
         if (!$secret || !$signature) {
@@ -172,7 +172,7 @@ class TenantSubscriptionController extends Controller
     private function verifyAndActivate(string $reference): bool
     {
         try {
-            $response = Http::withToken(config('services.paystack.secret_key'))
+            $response = Http::withToken(config('services.paystack.secret'))
                 ->get(
                     'https://api.paystack.co/transaction/verify/'
                     . urlencode($reference)
