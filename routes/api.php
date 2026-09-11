@@ -23,8 +23,10 @@ use Illuminate\Support\Facades\Route;
 
 
 // Customer authentication
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register'])
+    ->middleware('throttle:5,1');
+Route::post('/login', [AuthController::class, 'login'])
+    ->middleware('throttle:5,1');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -35,8 +37,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Tenant authentication
 Route::prefix('tenant')->group(function () {
-    Route::post('/register', [TenantAuthController::class, 'register']);
-    Route::post('/login', [TenantAuthController::class, 'login']);
+    Route::post('/register', [TenantAuthController::class, 'register'])
+        ->middleware('throttle:5,1');
+    Route::post('/login', [TenantAuthController::class, 'login'])
+        ->middleware('throttle:5,1');
 
     Route::middleware('auth:sanctum')->post(
         '/logout',
@@ -106,8 +110,10 @@ Route::prefix('orders')
             Route::get('/company/{id}', [OrderController::class, 'show']);
         });
 
-        Route::patch('/{id}/processing', [OrderController::class, 'markAsProcessing']);
-        Route::patch('/{id}/completed', [OrderController::class, 'markAsCompleted']);
+        Route::middleware('role:company,admin,super_admin')->group(function () {
+            Route::patch('/{id}/processing', [OrderController::class, 'markAsProcessing']);
+            Route::patch('/{id}/completed', [OrderController::class, 'markAsCompleted']);
+        });
 
         Route::middleware('role:admin,super_admin')->group(function () {
             Route::get('/', [OrderController::class, 'index']);
@@ -125,7 +131,7 @@ Route::prefix('payments')
         Route::middleware('role:company')->get('/company', [PaymentController::class, 'index']);
         Route::middleware('role:admin,super_admin')->get('/', [PaymentController::class, 'index']);
 
-        Route::post('/paystack/pay', [PaymentController::class, 'initialize']);
+        Route::middleware('role:user')->post('/paystack/pay', [PaymentController::class, 'initialize']);
         Route::get('/{payment}', [PaymentController::class, 'show']);
 
         Route::middleware('role:admin,super_admin')->group(function () {
@@ -166,7 +172,8 @@ Route::prefix('admin')->group(function () {
     Route::post('/setup', [AdminController::class, 'register'])
         ->middleware('throttle:5,1');
 
-    Route::post('/login', [AdminController::class, 'login']);
+    Route::post('/login', [AdminController::class, 'login'])
+        ->middleware('throttle:5,1');
 
     Route::middleware('auth:sanctum')->post(
         '/logout',
@@ -252,13 +259,20 @@ Route::prefix('admin')->group(function () {
     });
 
     // Customer Management
-    Route::get('/customers', [AdminCustomerController::class, 'index']);
-    Route::get('/customers/{id}', [AdminCustomerController::class, 'show']);
-    Route::patch('/customers/{id}/status', [AdminCustomerController::class, 'updateStatus']);
+    Route::middleware([
+        'auth:sanctum',
+        'role:admin,super_admin',
+    ])->group(function () {
+        Route::get('/customers', [AdminCustomerController::class, 'index']);
+        Route::get('/customers/{id}', [AdminCustomerController::class, 'show'])
+            ->whereNumber('id');
+        Route::patch('/customers/{id}/status', [AdminCustomerController::class, 'updateStatus'])
+            ->whereNumber('id');
+    });
     });
 
 // Cart
-Route::middleware('auth:sanctum')
+Route::middleware(['auth:sanctum', 'role:user'])
     ->prefix('cart')
     ->group(function () {
         Route::get('/', [CartController::class, 'index']);
