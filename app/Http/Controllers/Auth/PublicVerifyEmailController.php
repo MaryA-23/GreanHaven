@@ -11,18 +11,32 @@ class PublicVerifyEmailController extends Controller
 {
     public function __invoke(Request $request, $id, $hash)
     {
-        $user = User::findOrFail($id);
+        $user = User::find($id);
 
-        if ($hash !== sha1($user->getEmailForVerification())) {
-
+        if (!$user) {
             return redirect(
                 env('FRONTEND_URL', 'http://localhost:4200')
                 . '/email-verified?status=invalid'
             );
         }
 
-        if (! $user->hasVerifiedEmail()) {
+        $expectedHash = sha1(
+            $user->getEmailForVerification()
+        );
 
+        if (
+            !hash_equals(
+                $expectedHash,
+                (string) $hash
+            )
+        ) {
+            return redirect(
+                env('FRONTEND_URL', 'http://localhost:4200')
+                . '/email-verified?status=invalid'
+            );
+        }
+
+        if (!$user->hasVerifiedEmail()) {
             $user->markEmailAsVerified();
 
             event(new Verified($user));

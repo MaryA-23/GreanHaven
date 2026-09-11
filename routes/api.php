@@ -287,4 +287,6 @@ Route::middleware(['auth:sanctum', 'role:user'])
 Route::get(
     '/email/verify/{id}/{hash}',
     [PublicVerifyEmailController::class, '__invoke']
-)->name('verification.verify');
+)
+    ->middleware(['signed', 'throttle:6,1'])
+    ->name('verification.verify');

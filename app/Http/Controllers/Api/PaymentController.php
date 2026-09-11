@@ -10,7 +10,6 @@ use App\Services\InventoryService;
 use App\Services\AdminNotificationService;
 use App\Mail\PaymentSuccessMail;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\JsonResponse;
 use Unicodeveloper\Paystack\Facades\Paystack;
 use Illuminate\Support\Facades\Http;
@@ -397,10 +396,7 @@ class PaymentController extends Controller
                 'success' => false,
 
                 'message' =>
-                    'Payment initialization failed.',
-
-                'error' =>
-                    $e->getMessage()
+                    'Payment initialization failed.'
             ], 500);
         }
     }
@@ -515,10 +511,7 @@ class PaymentController extends Controller
 
                 return response()->json([
                     'error' =>
-                        'Unable to verify payment',
-
-                    'details' =>
-                        $paymentDetails,
+                        'Unable to verify payment'
                 ], 400);
             }
 
@@ -972,10 +965,7 @@ class PaymentController extends Controller
 
             return response()->json([
                 'error' =>
-                    'Payment verification failed',
-
-                'message' =>
-                    $e->getMessage()
+                    'Payment verification failed'
             ], 500);
         }
     }
@@ -1002,16 +992,32 @@ class PaymentController extends Controller
                 ['admin', 'super_admin'],
                 true
             )
-            &&
-            (int) $payment->user_id
-            !==
-            (int) $user->id
         ) {
+            if ($user->role === 'company') {
+                $payment->loadMissing('order');
 
-            return response()->json([
-                'error' =>
-                    'Unauthorized'
-            ], 403);
+                if (
+                    !$payment->order
+                    ||
+                    (int) $payment->order->company_id
+                    !==
+                    (int) $user->company_id
+                ) {
+                    return response()->json([
+                        'error' => 'Unauthorized'
+                    ], 403);
+                }
+            } elseif (
+                $user->role !== 'user'
+                ||
+                (int) $payment->user_id
+                !==
+                (int) $user->id
+            ) {
+                return response()->json([
+                    'error' => 'Unauthorized'
+                ], 403);
+            }
         }
 
 
@@ -1253,15 +1259,18 @@ class PaymentController extends Controller
 
 
         if (
+            !$secret
+            ||
             !$signature
             ||
-            hash_hmac(
-                'sha512',
-                $payload,
-                $secret
+            !hash_equals(
+                hash_hmac(
+                    'sha512',
+                    $payload,
+                    $secret
+                ),
+                $signature
             )
-            !==
-            $signature
         ) {
 
             return response()->json([
@@ -1762,10 +1771,7 @@ class PaymentController extends Controller
 
             return response()->json([
                 'message' =>
-                    'Webhook failed',
-
-                'error' =>
-                    $e->getMessage()
+                    'Webhook failed'
             ], 500);
         }
     }

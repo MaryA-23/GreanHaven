@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
-
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -19,36 +19,31 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'nullable|in:admin,user',
             'phone' => 'nullable|string|max:30',
         ]);
 
         $user = User::create([
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role ?? 'user',
-            'phone' => $request->phone,
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => 'user',
+            'phone' => $validated['phone'] ?? null,
         ]);
 
         try {
-
             Mail::to($user->email)
                 ->send(new WelcomeMail($user));
-
         } catch (\Exception $mailException) {
-
             Log::error('Welcome email failed', [
                 'message' => $mailException->getMessage(),
                 'user_id' => $user->id,
             ]);
-
         }
 
         return response()->json([
@@ -58,75 +53,63 @@ class AuthController extends Controller
         ], 201);
     }
 
-
     /**
      * Login customer.
      */
     public function login(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
         ]);
 
-        $user = User::where(
-            'email',
-            $request->email
-        )->first();
+        $user = User::where('email', $validated['email'])->first();
 
         if (
             !$user ||
-            !Hash::check(
-                $request->password,
-                $user->password
-            )
+            !Hash::check($validated['password'], $user->password)
         ) {
-
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid credentials',
             ], 401);
         }
 
-        $user->update([
-            'last_login' => now(),
-        ]);
-
-
         /**
-         * Admin bypass.
+         * This endpoint is only for customer accounts.
+         * Tenant/company accounts must use /api/tenant/login.
          */
-        if ($user->role === 'admin') {
-
-            $token = $user
-                ->createToken('auth_token')
-                ->plainTextToken;
-
+        if ($user->role !== 'user') {
             return response()->json([
-                'success' => true,
-                'message' => 'Admin login successful',
-                'user' => $this->formatUser($user),
-                'token' => $token,
-            ], 200);
+                'success' => false,
+                'message' => 'This login is only for customer accounts.',
+            ], 403);
         }
 
+        if (
+            isset($user->status) &&
+            $user->status === 'inactive'
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account is inactive.',
+            ], 403);
+        }
 
-        /**
-         * Customer/company email verification.
-         */
         if (!$user->hasVerifiedEmail()) {
-
             return response()->json([
                 'success' => false,
                 'message' => 'Please verify your email address before logging in.',
             ], 403);
         }
 
+        $user->update([
+            'last_login' => now(),
+        ]);
 
         $token = $user
             ->createToken('auth_token')
             ->plainTextToken;
-
 
         return response()->json([
             'success' => true,
@@ -136,16 +119,16 @@ class AuthController extends Controller
         ], 200);
     }
 
-
     /**
      * Logout.
      */
     public function logout(Request $request)
     {
-        $request
-            ->user()
-            ->currentAccessToken()
-            ?->delete();
+        $token = $request->user()?->currentAccessToken();
+
+        if ($token instanceof PersonalAccessToken) {
+            $token->delete();
+        }
 
         return response()->json([
             'success' => true,
@@ -153,20 +136,25 @@ class AuthController extends Controller
         ]);
     }
 
-
     /**
      * Get authenticated user.
      */
     public function user(Request $request)
     {
+        $user = $request->user();
+
+        if (!$user || $user->role !== 'user') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer account required.',
+            ], 403);
+        }
+
         return response()->json([
             'success' => true,
-            'user' => $this->formatUser(
-                $request->user()
-            ),
+            'user' => $this->formatUser($user),
         ]);
     }
-
 
     /**
      * Update customer profile.
@@ -174,6 +162,13 @@ class AuthController extends Controller
     public function updateProfile(Request $request)
     {
         $user = $request->user();
+
+        if (!$user || $user->role !== 'user') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer account required.',
+            ], 403);
+        }
 
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
@@ -193,72 +188,98 @@ class AuthController extends Controller
             ],
         ]);
 
+        $user->first_name = $validated['first_name'];
+        $user->last_name = $validated['last_name'];
+        $user->phone = $validated['phone'] ?? null;
 
-        /**
-         * Update normal information.
-         */
-        $user->first_name =
-            $validated['first_name'];
-
-        $user->last_name =
-            $validated['last_name'];
-
-        $user->phone =
-            $validated['phone'] ?? null;
-
-
-        /**
-         * Upload profile picture.
-         */
-        if (
-            $request->hasFile(
-                'profile_picture'
-            )
-        ) {
-
-            /**
-             * Delete old picture.
-             */
+        if ($request->hasFile('profile_picture')) {
             if (
                 $user->profile_picture &&
-                Storage::disk('public')->exists(
-                    $user->profile_picture
-                )
+                Storage::disk('public')->exists($user->profile_picture)
             ) {
-
-                Storage::disk('public')->delete(
-                    $user->profile_picture
-                );
+                Storage::disk('public')->delete($user->profile_picture);
             }
 
-
-            /**
-             * Store new picture.
-             */
             $path = $request
                 ->file('profile_picture')
-                ->store(
-                    'profile-pictures',
-                    'public'
-                );
-
+                ->store('profile-pictures', 'public');
 
             $user->profile_picture = $path;
         }
 
-
         $user->save();
-
 
         return response()->json([
             'success' => true,
             'message' => 'Profile updated successfully.',
-            'user' => $this->formatUser(
-                $user->fresh()
-            ),
+            'user' => $this->formatUser($user->fresh()),
         ]);
     }
 
+    /**
+     * Change customer password.
+     */
+    public function changePassword(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user || $user->role !== 'user') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Customer account required.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'current_password' => [
+                'required',
+                'string',
+            ],
+
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'max:72',
+                'confirmed',
+                'different:current_password',
+            ],
+        ]);
+
+        if (
+            !Hash::check(
+                $validated['current_password'],
+                $user->password
+            )
+        ) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect.',
+            ], 422);
+        }
+
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        /**
+         * Revoke every other customer token after a password change.
+         * Keep the current session active.
+         */
+        $currentToken = $user->currentAccessToken();
+
+        if ($currentToken instanceof PersonalAccessToken) {
+            $user->tokens()
+                ->where('id', '!=', $currentToken->getKey())
+                ->delete();
+        } else {
+            $user->tokens()->delete();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password changed successfully.',
+        ]);
+    }
 
     /**
      * Format user response.
@@ -316,52 +337,5 @@ class AuthController extends Controller
             'last_login' =>
                 $user->last_login,
         ];
-    }
-
-    public function changePassword(Request $request)
-    {
-        $user = $request->user();
-
-        $validated = $request->validate([
-            'current_password' => [
-                'required',
-                'string',
-            ],
-
-            'password' => [
-                'required',
-                'string',
-                'min:8',
-                'confirmed',
-            ],
-        ]);
-
-
-        if (
-            !Hash::check(
-                $validated['current_password'],
-                $user->password
-            )
-        ) {
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Current password is incorrect.',
-            ], 422);
-        }
-
-
-        $user->password =
-            Hash::make(
-                $validated['password']
-            );
-
-        $user->save();
-
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Password changed successfully.',
-        ]);
     }
 }

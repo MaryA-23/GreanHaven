@@ -14,11 +14,18 @@ class AdminCustomerController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
+
         $query = User::query()
             ->where('role', 'user');
 
-        if ($request->filled('search')) {
-            $search = trim($request->search);
+        $search = trim($validated['search'] ?? '');
+
+        if ($search !== '') {
 
             $query->where(function ($builder) use ($search) {
                 $builder
@@ -34,7 +41,7 @@ class AdminCustomerController extends Controller
             ->withCount('orders')
             ->latest()
             ->paginate(
-                (int) $request->get('per_page', 10)
+                (int) ($validated['per_page'] ?? 10)
             );
 
         return response()->json([

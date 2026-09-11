@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\Order;
 use App\Models\Payment;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class CartController extends Controller
 {
@@ -85,12 +86,31 @@ class CartController extends Controller
             )
             ->first();
 
+        $requestedQuantity =
+            (int) $request->quantity;
+
+        $existingQuantity =
+            $item ? (int) $item->quantity : 0;
+
+        $newQuantity =
+            $existingQuantity + $requestedQuantity;
+
+        if (
+            (int) $product->stock_quantity <
+            $newQuantity
+        ) {
+            return response()->json([
+                'message' =>
+                    'Requested quantity exceeds available stock.'
+            ], 422);
+        }
+
         if ($item) {
 
-            $item->increment(
-                'quantity',
-                $request->quantity
-            );
+            $item->update([
+                'quantity' => $newQuantity,
+                'price' => $product->price,
+            ]);
 
         } else {
 
@@ -195,11 +215,32 @@ class CartController extends Controller
         }
 
         $item = $cart->items()
+            ->with('product')
             ->findOrFail($id);
+
+        if (!$item->product) {
+            return response()->json([
+                'message' =>
+                    'Product no longer exists.'
+            ], 422);
+        }
+
+        if (
+            (int) $item->product->stock_quantity <
+            (int) $request->quantity
+        ) {
+            return response()->json([
+                'message' =>
+                    'Requested quantity exceeds available stock.'
+            ], 422);
+        }
 
         $item->update([
             'quantity' =>
-                $request->quantity
+                (int) $request->quantity,
+
+            'price' =>
+                $item->product->price,
         ]);
 
         $cart->load('items.product');
@@ -478,13 +519,53 @@ class CartController extends Controller
                 $cart->items
                 as $item
             ) {
+                $product = Product::where(
+                    'id',
+                    $item->product_id
+                )
+                    ->lockForUpdate()
+                    ->first();
 
-                /*
-                | Use current product price.
-                */
+                if (!$product) {
+                    DB::rollBack();
 
-                $price =
-                    $item->product->price;
+                    return response()->json([
+                        'message' =>
+                            'One or more products are no longer available.'
+                    ], 422);
+                }
+
+                if (
+                    (int) $product->company_id
+                    !==
+                    (int) $companyId
+                ) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'message' =>
+                            'Cart products must belong to the same company.'
+                    ], 422);
+                }
+
+                if (
+                    (int) $product->stock_quantity <
+                    (int) $item->quantity
+                ) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'message' =>
+                            'One or more products do not have enough stock.'
+                    ], 422);
+                }
+
+                $price = $product->price;
+
+                $item->setRelation(
+                    'product',
+                    $product
+                );
 
                 $total +=
                     $price *
@@ -638,15 +719,17 @@ class CartController extends Controller
 
             DB::rollBack();
 
+            Log::error(
+                'Cart checkout failed',
+                [
+                    'message' => $e->getMessage(),
+                    'user_id' => $user->id,
+                ]
+            );
 
             return response()->json([
-
                 'message' =>
-                    'Checkout failed',
-
-                'error' =>
-                    $e->getMessage()
-
+                    'Checkout failed'
             ], 500);
         }
     }
