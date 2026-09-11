@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\TenantAuthController;
 use App\Http\Controllers\Api\TenantDashboardController;
+use App\Http\Controllers\Api\TenantSubscriptionController;
 use App\Http\Controllers\Auth\PublicVerifyEmailController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CategoryController;
@@ -48,9 +49,39 @@ Route::prefix('tenant')->group(function () {
     );
 });
 
+// Tenant subscriptions
+Route::prefix('tenant/subscriptions')->group(function () {
+    Route::middleware([
+        'auth:sanctum',
+        'role:company',
+    ])->group(function () {
+        Route::get('/plans', [TenantSubscriptionController::class, 'plans']);
+        Route::get('/status', [TenantSubscriptionController::class, 'status']);
+
+        Route::post(
+            '/paystack/pay',
+            [TenantSubscriptionController::class, 'initialize']
+        );
+    });
+
+    Route::get(
+        '/paystack/callback',
+        [TenantSubscriptionController::class, 'callback']
+    )->name('tenant.subscriptions.paystack.callback');
+
+    Route::post(
+        '/paystack/webhook',
+        [TenantSubscriptionController::class, 'webhook']
+    )->name('tenant.subscriptions.paystack.webhook');
+});
+
 // Tenant application
 Route::prefix('tenant')
-    ->middleware(['auth:sanctum', 'role:company'])
+    ->middleware([
+        'auth:sanctum',
+        'role:company',
+        'subscription.active',
+    ])
     ->group(function () {
         Route::get('/dashboard/summary', [TenantDashboardController::class, 'summary']);
 
