@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Payment;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\TenantSubscription;
 use App\Services\InventoryService;
 use App\Services\AdminNotificationService;
 use App\Mail\PaymentSuccessMail;
@@ -1334,7 +1335,45 @@ class PaymentController extends Controller
 
         /*
         |--------------------------------------------------------------------------
-        | Payment metadata
+        | Tenant subscription payment
+        |--------------------------------------------------------------------------
+        |
+        | GreenHaven uses one Paystack webhook for both customer order payments
+        | and tenant subscription payments. Subscription events are handled first.
+        |
+        */
+
+        $metadata =
+            $data['metadata']
+            ?? [];
+
+        $reference =
+            $data['reference']
+            ?? null;
+
+        if (
+            isset($metadata['subscription_id'])
+            &&
+            isset($metadata['company_id'])
+        ) {
+
+            if (!$reference) {
+                return response()->json([
+                    'message' =>
+                        'Subscription reference missing'
+                ], 400);
+            }
+
+            return $this->processTenantSubscriptionWebhook(
+                $data,
+                $reference
+            );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Customer order payment metadata
         |--------------------------------------------------------------------------
         */
 
@@ -1350,11 +1389,6 @@ class PaymentController extends Controller
 
         $paymentId =
             $data['metadata']['payment_id']
-            ?? null;
-
-
-        $reference =
-            $data['reference']
             ?? null;
 
 
@@ -1775,4 +1809,170 @@ class PaymentController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Process a successful tenant subscription Paystack webhook.
+     */
+    private function processTenantSubscriptionWebhook(
+        array $data,
+        string $reference
+    ): JsonResponse {
+
+        try {
+            return DB::transaction(function () use ($data, $reference) {
+
+                $metadata =
+                    $data['metadata']
+                    ?? [];
+
+                $subscription =
+                    TenantSubscription::query()
+                    ->where(
+                        'reference',
+                        $reference
+                    )
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$subscription) {
+                    return response()->json([
+                        'message' =>
+                            'Subscription record not found'
+                    ], 404);
+                }
+
+                if (
+                    $subscription->status ===
+                    'paid'
+                ) {
+                    return response()->json([
+                        'message' =>
+                            'Subscription already processed'
+                    ], 200);
+                }
+
+                if (
+                    (int) ($metadata['subscription_id'] ?? 0)
+                    !==
+                    (int) $subscription->id
+                    ||
+                    (int) ($metadata['company_id'] ?? 0)
+                    !==
+                    (int) $subscription->company_id
+                ) {
+                    return response()->json([
+                        'message' =>
+                            'Subscription metadata mismatch'
+                    ], 400);
+                }
+
+                $expectedAmount =
+                    (int) round(
+                        (float) $subscription->amount
+                        * 100
+                    );
+
+                $paidAmount =
+                    (int) ($data['amount'] ?? 0);
+
+                if (
+                    $expectedAmount !==
+                    $paidAmount
+                ) {
+                    $subscription->update([
+                        'status' =>
+                            'failed'
+                    ]);
+
+                    return response()->json([
+                        'message' =>
+                            'Subscription amount mismatch'
+                    ], 400);
+                }
+
+                $latestActive =
+                    TenantSubscription::query()
+                    ->where(
+                        'company_id',
+                        $subscription->company_id
+                    )
+                    ->where(
+                        'status',
+                        'paid'
+                    )
+                    ->whereNotNull(
+                        'expires_at'
+                    )
+                    ->where(
+                        'expires_at',
+                        '>',
+                        now()
+                    )
+                    ->orderByDesc(
+                        'expires_at'
+                    )
+                    ->lockForUpdate()
+                    ->first();
+
+                $startsAt =
+                    $latestActive?->expires_at
+                    ?? now();
+
+                $expiresAt =
+                    $startsAt
+                    ->copy()
+                    ->addMonthsNoOverflow(
+                        $subscription->months
+                    );
+
+                $subscription->update([
+                    'status' =>
+                        'paid',
+                    'starts_at' =>
+                        $startsAt,
+                    'expires_at' =>
+                        $expiresAt,
+                    'paid_at' =>
+                        now(),
+                ]);
+
+                Log::info(
+                    'Tenant subscription payment processed',
+                    [
+                        'subscription_id' =>
+                            $subscription->id,
+                        'company_id' =>
+                            $subscription->company_id,
+                        'reference' =>
+                            $reference,
+                        'expires_at' =>
+                            $expiresAt,
+                    ]
+                );
+
+                return response()->json([
+                    'message' =>
+                        'Subscription webhook processed successfully'
+                ], 200);
+            });
+
+        } catch (\Throwable $e) {
+
+            Log::error(
+                'Tenant subscription webhook error',
+                [
+                    'message' =>
+                        $e->getMessage(),
+                    'reference' =>
+                        $reference,
+                ]
+            );
+
+            return response()->json([
+                'message' =>
+                    'Subscription webhook failed'
+            ], 500);
+        }
+    }
+
 }
