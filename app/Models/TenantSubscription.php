@@ -16,6 +16,10 @@ class TenantSubscription extends Model
         'currency',
         'reference',
         'status',
+        'source',
+        'admin_note',
+        'granted_by_uuid',
+        'source_subscription_id',
         'starts_at',
         'expires_at',
         'paid_at',
@@ -31,6 +35,14 @@ class TenantSubscription extends Model
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function sourceSubscription()
+    {
+        return $this->belongsTo(
+            TenantSubscription::class,
+            'source_subscription_id'
+        );
     }
 
     public function isActive(): bool
