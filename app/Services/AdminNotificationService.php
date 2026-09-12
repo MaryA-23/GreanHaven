@@ -26,9 +26,6 @@ class AdminNotificationService
         ]);
     }
 
-    /**
-     * New tenant/company registration.
-     */
     public function newTenant(
         int $companyId,
         string $companyName
@@ -42,9 +39,6 @@ class AdminNotificationService
         );
     }
 
-    /**
-     * New customer order.
-     */
     public function newOrder(
         int $orderId,
         ?string $companyName = null
@@ -64,9 +58,6 @@ class AdminNotificationService
         );
     }
 
-    /**
-     * Successful payment.
-     */
     public function paymentSuccessful(
         int $paymentId,
         int $orderId,
@@ -81,9 +72,6 @@ class AdminNotificationService
         );
     }
 
-    /**
-     * Failed payment.
-     */
     public function paymentFailed(
         int $paymentId,
         int $orderId,
@@ -98,9 +86,6 @@ class AdminNotificationService
         );
     }
 
-    /**
-     * Low-stock product.
-     */
     public function lowStock(
         int $productId,
         string $productName,
@@ -122,9 +107,6 @@ class AdminNotificationService
         );
     }
 
-    /**
-     * Out-of-stock product.
-     */
     public function outOfStock(
         int $productId,
         string $productName,
@@ -142,6 +124,43 @@ class AdminNotificationService
             $message,
             null,
             $productId
+        );
+    }
+
+    /**
+     * Tenant subscription payment/problem alert.
+     */
+    public function subscriptionProblem(
+        int $subscriptionId,
+        int $companyId,
+        string $companyName,
+        string $message
+    ): AdminNotification {
+        return $this->create(
+            'subscription_problem',
+            'Tenant Subscription Problem',
+            "{$companyName}: {$message}",
+            '/super-admin/subscriptions',
+            $subscriptionId
+        );
+    }
+
+    /**
+     * General platform error alert.
+     */
+    public function systemProblem(
+        string $portal,
+        string $area,
+        string $message,
+        ?string $actionUrl = null,
+        ?int $referenceId = null
+    ): AdminNotification {
+        return $this->create(
+            'system_problem',
+            'Platform Issue Detected',
+            "[{$portal}] {$area}: {$message}",
+            $actionUrl,
+            $referenceId
         );
     }
 }

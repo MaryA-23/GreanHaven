@@ -1082,14 +1082,20 @@ Route::prefix(
         |--------------------------------------------------------------------------
         */
 
-        Route::get(
-            '/subscriptions',
-            [
-                AdminTenantSubscriptionController::class,
-                'index'
-            ]
-        );
+            Route::get(
+                '/subscriptions',
+                [AdminTenantSubscriptionController::class, 'index']
+            );
 
+            Route::post(
+                '/subscriptions/{id}/verify-payment',
+                [AdminTenantSubscriptionController::class, 'verifyPayment']
+            )->whereNumber('id');
+
+            Route::post(
+                '/subscriptions/{id}/grant-access',
+                [AdminTenantSubscriptionController::class, 'grantAccess']
+            )->whereNumber('id');
 
         /*
         |--------------------------------------------------------------------------
