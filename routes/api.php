@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\TenantAuthController;
 use App\Http\Controllers\Api\TenantDashboardController;
 use App\Http\Controllers\Api\TenantSubscriptionController;
+use App\Http\Controllers\Admin\AdminSystemIssueController;
 
 use App\Http\Controllers\Auth\PublicVerifyEmailController;
 
@@ -907,6 +908,11 @@ Route::prefix(
             ]
         )->whereNumber(
             'id'
+        );
+        
+        Route::get(
+            '/system-issues',
+            [AdminSystemIssueController::class, 'index']
         );
 
 
