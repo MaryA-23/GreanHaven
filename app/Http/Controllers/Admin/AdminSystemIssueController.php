@@ -52,6 +52,25 @@ class AdminSystemIssueController extends Controller
 
         $issues = $query->paginate($perPage);
 
+        $issues->getCollection()->transform(
+            function (AdminNotification $issue) {
+                $requiresCoding =
+                    $issue->type === 'system_problem';
+
+                $issue->resolution_type =
+                    $requiresCoding
+                        ? 'requires_coding'
+                        : 'fix_in_app';
+
+                $issue->resolution_label =
+                    $requiresCoding
+                        ? 'Requires Coding'
+                        : 'Fix in App';
+
+                return $issue;
+            }
+        );
+
         $summaryQuery = AdminNotification::query()
             ->whereIn('type', [
                 'system_problem',

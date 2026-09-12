@@ -228,8 +228,8 @@ class TenantSubscriptionController extends Controller
         );
 
         $frontendUrl = rtrim(
-            env(
-                'FRONTEND_URL',
+            (string) config(
+                'app.frontend_url',
                 'http://localhost:4200'
             ),
             '/'

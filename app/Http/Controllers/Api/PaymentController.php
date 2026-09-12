@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class PaymentController extends Controller
 {
@@ -125,7 +126,7 @@ class PaymentController extends Controller
     /**
      * Initialize Paystack payment.
      */
-    public function initialize(Request $request)
+    public function initialize(Request $request, AdminNotificationService $adminNotificationService)
     {
         $request->validate([
             'order_id' =>
@@ -394,7 +395,8 @@ class PaymentController extends Controller
 
 
             $this->notifySystemProblem(
-                $adminNotificationService ?? app(AdminNotificationService::class),
+                $adminNotificationService,
+                'Customer/Public Portal',
                 'Payments',
                 'Customer payment initialization failed.',
                 '/super-admin/payments',
@@ -495,14 +497,38 @@ class PaymentController extends Controller
             |--------------------------------------------------------------------------
             */
 
+            $secret =
+                config('services.paystack.secret');
+
+            $baseUrl = rtrim(
+                (string) config(
+                    'services.paystack.payment_url',
+                    'https://api.paystack.co'
+                ),
+                '/'
+            );
+
+            if (!$secret) {
+                $this->notifySystemProblem(
+                    $adminNotificationService,
+                    'Customer/Public Portal',
+                    'Payments',
+                    'Paystack configuration is missing during payment verification.',
+                    '/super-admin/payments'
+                );
+
+                return response()->json([
+                    'error' =>
+                        'Payment service is not configured.'
+                ], 500);
+            }
+
             $paymentDetails =
-                Http::withToken(
-                    env(
-                        'PAYSTACK_SECRET_KEY'
-                    )
-                )
+                Http::withToken($secret)
                 ->get(
-                    "https://api.paystack.co/transaction/verify/{$reference}"
+                    $baseUrl
+                    . '/transaction/verify/'
+                    . urlencode($reference)
                 )
                 ->json();
 
@@ -940,13 +966,20 @@ class PaymentController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
+                $frontendUrl = rtrim(
+                    (string) config(
+                        'app.frontend_url',
+                        'http://localhost:4200'
+                    ),
+                    '/'
+                );
+
                 return redirect(
-                    'http://localhost:4200/order-success?order_id='
+                    $frontendUrl
+                    . '/order-success?order_id='
                     . $order->id
                     . '&reference='
-                    . urlencode(
-                        $reference
-                    )
+                    . urlencode($reference)
                 );
 
 
@@ -974,6 +1007,7 @@ class PaymentController extends Controller
 
             $this->notifySystemProblem(
                 $adminNotificationService,
+                'Customer/Public Portal',
                 'Payments',
                 'Customer payment callback verification failed.',
                 '/super-admin/payments'
@@ -1259,9 +1293,7 @@ class PaymentController extends Controller
         */
 
         $secret =
-            env(
-                'PAYSTACK_SECRET_KEY'
-            );
+            config('services.paystack.secret');
 
 
         $signature =
@@ -1274,9 +1306,22 @@ class PaymentController extends Controller
             $request->getContent();
 
 
+        if (!$secret) {
+            $this->notifySystemProblem(
+                $adminNotificationService,
+                'Customer/Public Portal',
+                'Payments',
+                'Paystack webhook secret is not configured.',
+                '/super-admin/payments'
+            );
+
+            return response()->json([
+                'message' =>
+                    'Payment service is not configured'
+            ], 500);
+        }
+
         if (
-            !$secret
-            ||
             !$signature
             ||
             !hash_equals(
@@ -1821,6 +1866,7 @@ class PaymentController extends Controller
 
             $this->notifySystemProblem(
                 $adminNotificationService,
+                'Customer/Public Portal',
                 'Payments',
                 'Paystack order-payment webhook processing failed.',
                 '/super-admin/payments'
@@ -2016,6 +2062,7 @@ class PaymentController extends Controller
 
             $this->notifySystemProblem(
                 $adminNotificationService,
+                'Tenant Portal',
                 'Subscriptions',
                 'Tenant subscription webhook processing failed.',
                 '/super-admin/subscriptions'
@@ -2031,6 +2078,7 @@ class PaymentController extends Controller
 
     private function notifySystemProblem(
         AdminNotificationService $adminNotificationService,
+        string $portal,
         string $area,
         string $message,
         string $actionUrl,
@@ -2038,7 +2086,7 @@ class PaymentController extends Controller
     ): void {
         try {
             $adminNotificationService->systemProblem(
-                'Customer/Public Portal',
+                $portal,
                 $area,
                 $message,
                 $actionUrl,

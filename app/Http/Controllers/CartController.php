@@ -96,7 +96,7 @@ class CartController extends Controller
             $existingQuantity + $requestedQuantity;
 
         if (
-            (int) $product->stock_quantity <
+            (int) $product->quantity <
             $newQuantity
         ) {
             return response()->json([
@@ -226,7 +226,7 @@ class CartController extends Controller
         }
 
         if (
-            (int) $item->product->stock_quantity <
+            (int) $item->product->quantity <
             (int) $request->quantity
         ) {
             return response()->json([
@@ -549,7 +549,7 @@ class CartController extends Controller
                 }
 
                 if (
-                    (int) $product->stock_quantity <
+                    (int) $product->quantity <
                     (int) $item->quantity
                 ) {
                     DB::rollBack();
