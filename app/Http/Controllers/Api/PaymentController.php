@@ -393,6 +393,14 @@ class PaymentController extends Controller
             );
 
 
+            $this->notifySystemProblem(
+                $adminNotificationService ?? app(AdminNotificationService::class),
+                'Payments',
+                'Customer payment initialization failed.',
+                '/super-admin/payments',
+                $payment->id
+            );
+
             return response()->json([
                 'success' => false,
 
@@ -964,6 +972,13 @@ class PaymentController extends Controller
             );
 
 
+            $this->notifySystemProblem(
+                $adminNotificationService,
+                'Payments',
+                'Customer payment callback verification failed.',
+                '/super-admin/payments'
+            );
+
             return response()->json([
                 'error' =>
                     'Payment verification failed'
@@ -1366,7 +1381,8 @@ class PaymentController extends Controller
 
             return $this->processTenantSubscriptionWebhook(
                 $data,
-                $reference
+                $reference,
+                $adminNotificationService
             );
         }
 
@@ -1803,6 +1819,13 @@ class PaymentController extends Controller
             );
 
 
+            $this->notifySystemProblem(
+                $adminNotificationService,
+                'Payments',
+                'Paystack order-payment webhook processing failed.',
+                '/super-admin/payments'
+            );
+
             return response()->json([
                 'message' =>
                     'Webhook failed'
@@ -1815,7 +1838,8 @@ class PaymentController extends Controller
      */
     private function processTenantSubscriptionWebhook(
         array $data,
-        string $reference
+        string $reference,
+        AdminNotificationService $adminNotificationService
     ): JsonResponse {
 
         try {
@@ -1883,6 +1907,28 @@ class PaymentController extends Controller
                         'status' =>
                             'failed'
                     ]);
+
+                    try {
+                        $subscription->loadMissing('company');
+
+                        $adminNotificationService
+                            ->subscriptionProblem(
+                                $subscription->id,
+                                $subscription->company_id,
+                                $subscription->company?->name ?? 'Tenant',
+                                'Paystack subscription amount does not match the expected amount.'
+                            );
+                    } catch (\Throwable $notificationException) {
+                        Log::error(
+                            'Subscription problem notification failed',
+                            [
+                                'message' =>
+                                    $notificationException->getMessage(),
+                                'subscription_id' =>
+                                    $subscription->id,
+                            ]
+                        );
+                    }
 
                     return response()->json([
                         'message' =>
@@ -1968,10 +2014,46 @@ class PaymentController extends Controller
                 ]
             );
 
+            $this->notifySystemProblem(
+                $adminNotificationService,
+                'Subscriptions',
+                'Tenant subscription webhook processing failed.',
+                '/super-admin/subscriptions'
+            );
+
             return response()->json([
                 'message' =>
                     'Subscription webhook failed'
             ], 500);
+        }
+    }
+
+
+    private function notifySystemProblem(
+        AdminNotificationService $adminNotificationService,
+        string $area,
+        string $message,
+        string $actionUrl,
+        ?int $referenceId = null
+    ): void {
+        try {
+            $adminNotificationService->systemProblem(
+                'Customer/Public Portal',
+                $area,
+                $message,
+                $actionUrl,
+                $referenceId
+            );
+        } catch (\Throwable $notificationException) {
+            Log::error(
+                'System problem notification failed',
+                [
+                    'message' =>
+                        $notificationException->getMessage(),
+                    'area' => $area,
+                    'reference_id' => $referenceId,
+                ]
+            );
         }
     }
 

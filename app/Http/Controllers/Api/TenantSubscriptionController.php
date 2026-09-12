@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\TenantSubscription;
+use App\Services\AdminNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -87,6 +88,12 @@ class TenantSubscriptionController extends Controller
         );
 
         if (!$secret) {
+            $this->notifySystemProblem(
+                'Subscriptions',
+                'Paystack configuration is missing while a tenant is trying to subscribe.',
+                '/super-admin/subscriptions'
+            );
+
             return response()->json([
                 'success' => false,
                 'message' => 'Paystack configuration is missing.',
@@ -147,6 +154,11 @@ class TenantSubscriptionController extends Controller
                     'status' => 'failed',
                 ]);
 
+                $this->notifySubscriptionProblem(
+                    $subscription,
+                    'Paystack rejected the tenant subscription initialization request.'
+                );
+
                 Log::warning(
                     'Paystack subscription initialization rejected',
                     [
@@ -192,6 +204,11 @@ class TenantSubscriptionController extends Controller
             $subscription->update([
                 'status' => 'failed',
             ]);
+
+            $this->notifySubscriptionProblem(
+                $subscription,
+                'An unexpected error occurred while initializing the tenant subscription payment.'
+            );
 
             return response()->json([
                 'success' => false,
@@ -328,6 +345,12 @@ class TenantSubscriptionController extends Controller
                 ]
             );
 
+            $this->notifySystemProblem(
+                'Subscriptions',
+                'Paystack configuration is missing during subscription verification.',
+                '/super-admin/subscriptions'
+            );
+
             return false;
         }
 
@@ -346,6 +369,11 @@ class TenantSubscriptionController extends Controller
                 !$response->successful()
                 || !$response->json('status')
             ) {
+                $this->notifySubscriptionProblemByReference(
+                    $reference,
+                    'Paystack could not verify this tenant subscription payment.'
+                );
+
                 return false;
             }
 
@@ -359,6 +387,11 @@ class TenantSubscriptionController extends Controller
                 || ($data['status'] ?? null)
                     !== 'success'
             ) {
+                $this->notifySubscriptionProblemByReference(
+                    $reference,
+                    'Paystack reports that this tenant subscription payment was not successful.'
+                );
+
                 return false;
             }
 
@@ -409,6 +442,11 @@ class TenantSubscriptionController extends Controller
                             'status' => 'failed',
                         ]);
 
+                        $this->notifySubscriptionProblem(
+                            $subscription,
+                            'The verified subscription payment amount does not match the expected amount.'
+                        );
+
                         return false;
                     }
 
@@ -446,6 +484,11 @@ class TenantSubscriptionController extends Controller
                         $subscription->update([
                             'status' => 'failed',
                         ]);
+
+                        $this->notifySubscriptionProblem(
+                            $subscription,
+                            'The verified subscription payment metadata does not match this tenant.'
+                        );
 
                         return false;
                     }
@@ -508,7 +551,85 @@ class TenantSubscriptionController extends Controller
                 ]
             );
 
+            $this->notifySubscriptionProblemByReference(
+                $reference,
+                'An unexpected error occurred while verifying the tenant subscription payment.'
+            );
+
             return false;
         }
     }
+
+    private function notifySubscriptionProblem(
+        TenantSubscription $subscription,
+        string $message
+    ): void {
+        try {
+            $subscription->loadMissing('company');
+
+            app(AdminNotificationService::class)
+                ->subscriptionProblem(
+                    $subscription->id,
+                    $subscription->company_id,
+                    $subscription->company?->name ?? 'Tenant',
+                    $message
+                );
+        } catch (\Throwable $e) {
+            Log::error(
+                'Subscription problem notification failed',
+                [
+                    'message' => $e->getMessage(),
+                    'subscription_id' => $subscription->id,
+                ]
+            );
+        }
+    }
+
+    private function notifySubscriptionProblemByReference(
+        string $reference,
+        string $message
+    ): void {
+        $subscription = TenantSubscription::query()
+            ->where('reference', $reference)
+            ->first();
+
+        if ($subscription) {
+            $this->notifySubscriptionProblem(
+                $subscription,
+                $message
+            );
+            return;
+        }
+
+        $this->notifySystemProblem(
+            'Subscriptions',
+            $message,
+            '/super-admin/subscriptions'
+        );
+    }
+
+    private function notifySystemProblem(
+        string $area,
+        string $message,
+        string $actionUrl
+    ): void {
+        try {
+            app(AdminNotificationService::class)
+                ->systemProblem(
+                    'Tenant Portal',
+                    $area,
+                    $message,
+                    $actionUrl
+                );
+        } catch (\Throwable $e) {
+            Log::error(
+                'System problem notification failed',
+                [
+                    'message' => $e->getMessage(),
+                    'area' => $area,
+                ]
+            );
+        }
+    }
+
 }
