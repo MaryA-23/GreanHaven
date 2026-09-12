@@ -1,142 +1,83 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Admin;
 use App\Models\TenantSubscription;
-use App\Services\AdminNotificationService;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
 
-class AdminTenantSubscriptionController extends Controller
+class TenantSubscriptionController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    private const PLANS = [
+        1 => 100,
+        3 => 270,
+        6 => 500,
+        12 => 900,
+    ];
+
+    public function plans()
     {
-        $validated = $request->validate([
-            'search' => ['nullable', 'string', 'max:100'],
-            'status' => ['nullable', 'in:all,active,expired,pending,failed,paid'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'page' => ['nullable', 'integer', 'min:1'],
-        ]);
-
-        $search = trim((string) ($validated['search'] ?? ''));
-        $status = $validated['status'] ?? 'all';
-        $perPage = (int) ($validated['per_page'] ?? 15);
-
-        $query = TenantSubscription::query()
-            ->with([
-                'company:id,name,email,phone',
-            ])
-            ->latest('id');
-
-        if ($search !== '') {
-            $query->where(function ($builder) use ($search) {
-                $builder
-                    ->where('reference', 'like', "%{$search}%")
-                    ->orWhereHas('company', function ($companyQuery) use ($search) {
-                        $companyQuery
-                            ->where('name', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%")
-                            ->orWhere('phone', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        switch ($status) {
-            case 'active':
-                $query
-                    ->where('status', 'paid')
-                    ->whereNotNull('expires_at')
-                    ->where('expires_at', '>', now());
-                break;
-
-            case 'expired':
-                $query
-                    ->where('status', 'paid')
-                    ->whereNotNull('expires_at')
-                    ->where('expires_at', '<=', now());
-                break;
-
-            case 'paid':
-                $query->where('status', 'paid');
-                break;
-
-            case 'pending':
-                $query->where('status', 'pending');
-                break;
-
-            case 'failed':
-                $query->where('status', 'failed');
-                break;
-        }
-
-        $subscriptions = $query->paginate($perPage);
-
-        $subscriptions->getCollection()->transform(
-            fn (TenantSubscription $subscription) =>
-                $this->subscriptionPayload($subscription)
-        );
-
-        $summary = [
-            'total' => TenantSubscription::count(),
-
-            'active' => TenantSubscription::query()
-                ->where('status', 'paid')
-                ->whereNotNull('expires_at')
-                ->where('expires_at', '>', now())
-                ->count(),
-
-            'expired' => TenantSubscription::query()
-                ->where('status', 'paid')
-                ->whereNotNull('expires_at')
-                ->where('expires_at', '<=', now())
-                ->count(),
-
-            'pending' => TenantSubscription::query()
-                ->where('status', 'pending')
-                ->count(),
-
-            'failed' => TenantSubscription::query()
-                ->where('status', 'failed')
-                ->count(),
-
-            'revenue' => (float) TenantSubscription::query()
-                ->where('status', 'paid')
-                ->sum('amount'),
-        ];
-
         return response()->json([
             'success' => true,
-            'summary' => $summary,
-            'data' => $subscriptions,
+            'currency' => 'GHS',
+            'plans' => collect(self::PLANS)
+                ->map(fn ($amount, $months) => [
+                    'months' => (int) $months,
+                    'amount' => $amount,
+                ])
+                ->values(),
         ]);
     }
 
-    public function verifyPayment(
-        Request $request,
-        int $id,
-        AdminNotificationService $adminNotificationService
-    ): JsonResponse {
-        $this->requireSuperAdmin($request);
+    public function status(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user || $user->role !== 'company' || !$user->company_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Tenant account required.',
+            ], 403);
+        }
 
         $subscription = TenantSubscription::query()
-            ->with('company')
-            ->findOrFail($id);
+            ->where('company_id', $user->company_id)
+            ->where('status', 'paid')
+            ->orderByDesc('expires_at')
+            ->first();
 
-        if ($subscription->status === 'paid') {
+        return response()->json([
+            'success' => true,
+            'active' => $subscription?->isActive() ?? false,
+            'subscription' => $subscription,
+        ]);
+    }
+
+    public function initialize(Request $request)
+    {
+        $validated = $request->validate([
+            'months' => [
+                'required',
+                'integer',
+                'in:1,3,6,12',
+            ],
+        ]);
+
+        $user = $request->user();
+
+        if (!$user || $user->role !== 'company' || !$user->company_id) {
             return response()->json([
-                'success' => true,
-                'message' => 'Subscription is already active.',
-                'data' => $this->subscriptionPayload($subscription),
-            ]);
+                'success' => false,
+                'message' => 'Tenant account required.',
+            ], 403);
         }
 
         $secret = config('services.paystack.secret');
+
         $baseUrl = rtrim(
             config(
                 'services.paystack.payment_url',
@@ -152,98 +93,386 @@ class AdminTenantSubscriptionController extends Controller
             ], 500);
         }
 
+        $companyId = (int) $user->company_id;
+        $months = (int) $validated['months'];
+        $amount = self::PLANS[$months];
+
+        $reference =
+            'SUB-'
+            . now()->format('YmdHis')
+            . '-'
+            . Str::upper(Str::random(8));
+
+        $subscription = TenantSubscription::create([
+            'company_id' => $companyId,
+            'months' => $months,
+            'amount' => $amount,
+            'currency' => 'GHS',
+            'reference' => $reference,
+            'status' => 'pending',
+        ]);
+
+        $callbackUrl = route(
+            'tenant.subscriptions.paystack.callback'
+        );
+
         try {
             $response = Http::withToken($secret)
-                ->get(
-                    $baseUrl
-                    . '/transaction/verify/'
-                    . urlencode($subscription->reference)
+                ->post(
+                    $baseUrl . '/transaction/initialize',
+                    [
+                        'email' => $user->email,
+                        'amount' => (int) round(
+                            $amount * 100
+                        ),
+                        'currency' => 'GHS',
+                        'reference' => $reference,
+                        'callback_url' => $callbackUrl,
+                        'metadata' => [
+                            'subscription_id' =>
+                                $subscription->id,
+                            'company_id' =>
+                                $companyId,
+                            'months' =>
+                                $months,
+                        ],
+                    ]
                 );
 
             if (
                 !$response->successful()
                 || !$response->json('status')
             ) {
-                $adminNotificationService->subscriptionProblem(
-                    $subscription->id,
-                    $subscription->company_id,
-                    $subscription->company?->name ?? 'Tenant',
-                    'Paystack could not verify this subscription payment.'
+                $subscription->update([
+                    'status' => 'failed',
+                ]);
+
+                Log::warning(
+                    'Paystack subscription initialization rejected',
+                    [
+                        'company_id' => $companyId,
+                        'subscription_id' =>
+                            $subscription->id,
+                        'reference' => $reference,
+                        'http_status' =>
+                            $response->status(),
+                    ]
                 );
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Paystack could not verify this payment.',
-                ], 422);
+                    'message' =>
+                        'Unable to initialize subscription payment.',
+                ], 502);
             }
 
-            $data = $response->json('data');
-
-            if (($data['status'] ?? null) !== 'success') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Paystack reports that this payment is not successful.',
-                ], 422);
-            }
-
-            $expectedAmount = (int) round(
-                ((float) $subscription->amount) * 100
+            return response()->json([
+                'success' => true,
+                'message' =>
+                    'Subscription payment initialized.',
+                'authorization_url' =>
+                    $response->json(
+                        'data.authorization_url'
+                    ),
+                'reference' => $reference,
+                'subscription' => $subscription,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error(
+                'Tenant subscription initialization failed',
+                [
+                    'message' => $e->getMessage(),
+                    'company_id' => $companyId,
+                    'subscription_id' =>
+                        $subscription->id,
+                    'reference' => $reference,
+                ]
             );
 
-            $paidAmount = (int) ($data['amount'] ?? 0);
+            $subscription->update([
+                'status' => 'failed',
+            ]);
 
-            if ($expectedAmount !== $paidAmount) {
-                $adminNotificationService->subscriptionProblem(
-                    $subscription->id,
-                    $subscription->company_id,
-                    $subscription->company?->name ?? 'Tenant',
-                    'Verified payment amount does not match the expected subscription amount.'
-                );
+            return response()->json([
+                'success' => false,
+                'message' =>
+                    'Unable to initialize subscription payment.',
+            ], 500);
+        }
+    }
 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Payment amount does not match this subscription.',
-                ], 422);
-            }
+    public function callback(Request $request)
+    {
+        $reference = trim(
+            (string) $request->query(
+                'reference',
+                ''
+            )
+        );
 
-            $metadata = $data['metadata'] ?? [];
+        $frontendUrl = rtrim(
+            env(
+                'FRONTEND_URL',
+                'http://localhost:4200'
+            ),
+            '/'
+        );
+
+        if ($reference === '') {
+            return redirect(
+                $frontendUrl
+                . '/tenant/subscription?status=failed'
+            );
+        }
+
+        $verified =
+            $this->verifyAndActivate(
+                $reference
+            );
+
+        return redirect(
+            $frontendUrl
+            . '/tenant/subscription?status='
+            . (
+                $verified
+                    ? 'success'
+                    : 'failed'
+            )
+        );
+    }
+
+    public function webhook(Request $request)
+    {
+        $secret =
+            config(
+                'services.paystack.secret'
+            );
+
+        $signature =
+            $request->header(
+                'x-paystack-signature'
+            );
+
+        if (!$secret || !$signature) {
+            return response()->json([
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        $expected =
+            hash_hmac(
+                'sha512',
+                $request->getContent(),
+                $secret
+            );
+
+        if (
+            !hash_equals(
+                $expected,
+                $signature
+            )
+        ) {
+            return response()->json([
+                'message' => 'Unauthorized',
+            ], 401);
+        }
+
+        if (
+            $request->input('event')
+            !== 'charge.success'
+        ) {
+            return response()->json([
+                'message' => 'Ignored',
+            ], 200);
+        }
+
+        $reference = trim(
+            (string) $request->input(
+                'data.reference',
+                ''
+            )
+        );
+
+        if ($reference !== '') {
+            $this->verifyAndActivate(
+                $reference
+            );
+        }
+
+        return response()->json([
+            'message' => 'OK',
+        ], 200);
+    }
+
+    private function verifyAndActivate(
+        string $reference
+    ): bool {
+        $secret =
+            config(
+                'services.paystack.secret'
+            );
+
+        $baseUrl = rtrim(
+            config(
+                'services.paystack.payment_url',
+                'https://api.paystack.co'
+            ),
+            '/'
+        );
+
+        if (!$secret) {
+            Log::error(
+                'Paystack secret is missing during subscription verification',
+                [
+                    'reference' => $reference,
+                ]
+            );
+
+            return false;
+        }
+
+        try {
+            $response =
+                Http::withToken($secret)
+                    ->get(
+                        $baseUrl
+                        . '/transaction/verify/'
+                        . urlencode(
+                            $reference
+                        )
+                    );
 
             if (
-                (int) ($metadata['subscription_id'] ?? 0)
-                    !== (int) $subscription->id
-                ||
-                (int) ($metadata['company_id'] ?? 0)
-                    !== (int) $subscription->company_id
+                !$response->successful()
+                || !$response->json('status')
             ) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Payment metadata does not match this subscription.',
-                ], 422);
+                return false;
             }
 
-            $subscription = DB::transaction(
-                function () use ($subscription) {
+            $data =
+                $response->json(
+                    'data'
+                );
 
-                    $locked = TenantSubscription::query()
-                        ->whereKey($subscription->id)
-                        ->lockForUpdate()
-                        ->firstOrFail();
+            if (
+                !is_array($data)
+                || ($data['status'] ?? null)
+                    !== 'success'
+            ) {
+                return false;
+            }
 
-                    if ($locked->status === 'paid') {
-                        return $locked;
+            return DB::transaction(
+                function () use (
+                    $reference,
+                    $data
+                ) {
+                    $subscription =
+                        TenantSubscription::query()
+                            ->where(
+                                'reference',
+                                $reference
+                            )
+                            ->lockForUpdate()
+                            ->first();
+
+                    if (!$subscription) {
+                        return false;
                     }
 
-                    $latestActive = TenantSubscription::query()
-                        ->where(
-                            'company_id',
-                            $locked->company_id
+                    if (
+                        $subscription->status
+                        === 'paid'
+                    ) {
+                        return true;
+                    }
+
+                    $expectedAmount =
+                        (int) round(
+                            (
+                                (float)
+                                $subscription->amount
+                            ) * 100
+                        );
+
+                    $paidAmount =
+                        (int) (
+                            $data['amount']
+                            ?? 0
+                        );
+
+                    if (
+                        $expectedAmount
+                        !== $paidAmount
+                    ) {
+                        $subscription->update([
+                            'status' => 'failed',
+                        ]);
+
+                        return false;
+                    }
+
+                    $metadata =
+                        $data['metadata']
+                        ?? [];
+
+                    if (
+                        !is_array($metadata)
+                        ||
+                        (
+                            (int) (
+                                $metadata[
+                                    'subscription_id'
+                                ]
+                                ?? 0
+                            )
+                            !==
+                            (int)
+                            $subscription->id
                         )
-                        ->where('status', 'paid')
-                        ->whereNotNull('expires_at')
-                        ->where('expires_at', '>', now())
-                        ->orderByDesc('expires_at')
-                        ->lockForUpdate()
-                        ->first();
+                        ||
+                        (
+                            (int) (
+                                $metadata[
+                                    'company_id'
+                                ]
+                                ?? 0
+                            )
+                            !==
+                            (int)
+                            $subscription->company_id
+                        )
+                    ) {
+                        $subscription->update([
+                            'status' => 'failed',
+                        ]);
+
+                        return false;
+                    }
+
+                    $latestActive =
+                        TenantSubscription::query()
+                            ->where(
+                                'company_id',
+                                $subscription->company_id
+                            )
+                            ->where(
+                                'status',
+                                'paid'
+                            )
+                            ->whereNotNull(
+                                'expires_at'
+                            )
+                            ->where(
+                                'expires_at',
+                                '>',
+                                now()
+                            )
+                            ->orderByDesc(
+                                'expires_at'
+                            )
+                            ->lockForUpdate()
+                            ->first();
 
                     $startsAt =
                         $latestActive?->expires_at
@@ -253,266 +482,33 @@ class AdminTenantSubscriptionController extends Controller
                         $startsAt
                             ->copy()
                             ->addMonthsNoOverflow(
-                                $locked->months
+                                $subscription->months
                             );
 
-                    $locked->update([
+                    $subscription->update([
                         'status' => 'paid',
-                        'starts_at' => $startsAt,
-                        'expires_at' => $expiresAt,
+                        'starts_at' =>
+                            $startsAt,
+                        'expires_at' =>
+                            $expiresAt,
                         'paid_at' => now(),
                     ]);
 
-                    return $locked->fresh('company');
+                    return true;
                 }
             );
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Payment verified and tenant access activated.',
-                'data' => $this->subscriptionPayload($subscription),
-            ]);
-
         } catch (\Throwable $e) {
             Log::error(
-                'Super Admin subscription verification failed',
+                'Tenant subscription verification failed',
                 [
-                    'message' => $e->getMessage(),
-                    'subscription_id' => $subscription->id,
-                    'reference' => $subscription->reference,
+                    'message' =>
+                        $e->getMessage(),
+                    'reference' =>
+                        $reference,
                 ]
             );
 
-            $adminNotificationService->subscriptionProblem(
-                $subscription->id,
-                $subscription->company_id,
-                $subscription->company?->name ?? 'Tenant',
-                'An error occurred while verifying the subscription payment.'
-            );
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Unable to verify the subscription payment.',
-            ], 500);
+            return false;
         }
-    }
-
-    public function grantAccess(
-        Request $request,
-        int $id
-    ): JsonResponse {
-        $admin = $this->requireSuperAdmin($request);
-
-        $validated = $request->validate([
-            'months' => [
-                'required',
-                'integer',
-                Rule::in([1, 3, 6, 12]),
-            ],
-            'reason' => [
-                'required',
-                'string',
-                'min:5',
-                'max:500',
-            ],
-        ]);
-
-        $source = TenantSubscription::query()
-            ->with('company')
-            ->findOrFail($id);
-
-        $override = DB::transaction(
-            function () use (
-                $source,
-                $validated,
-                $admin
-            ) {
-
-                $latestActive =
-                    TenantSubscription::query()
-                        ->where(
-                            'company_id',
-                            $source->company_id
-                        )
-                        ->where(
-                            'status',
-                            'paid'
-                        )
-                        ->whereNotNull(
-                            'expires_at'
-                        )
-                        ->where(
-                            'expires_at',
-                            '>',
-                            now()
-                        )
-                        ->orderByDesc(
-                            'expires_at'
-                        )
-                        ->lockForUpdate()
-                        ->first();
-
-                $startsAt =
-                    $latestActive?->expires_at
-                    ?? now();
-
-                $expiresAt =
-                    $startsAt
-                        ->copy()
-                        ->addMonthsNoOverflow(
-                            (int) $validated['months']
-                        );
-
-                return TenantSubscription::create([
-                    'company_id' =>
-                        $source->company_id,
-
-                    'months' =>
-                        (int) $validated['months'],
-
-                    'amount' => 0,
-
-                    'currency' =>
-                        $source->currency ?: 'GHS',
-
-                    'reference' =>
-                        'ADMIN-'
-                        . now()->format('YmdHis')
-                        . '-'
-                        . strtoupper(
-                            substr(
-                                sha1(
-                                    $admin->uuid
-                                    . microtime(true)
-                                ),
-                                0,
-                                8
-                            )
-                        ),
-
-                    'status' => 'paid',
-
-                    'starts_at' =>
-                        $startsAt,
-
-                    'expires_at' =>
-                        $expiresAt,
-
-                    'paid_at' =>
-                        now(),
-                ])->fresh('company');
-            }
-        );
-
-        Log::warning(
-            'Super Admin granted tenant subscription access manually',
-            [
-                'admin_uuid' => $admin->uuid,
-                'company_id' => $source->company_id,
-                'source_subscription_id' => $source->id,
-                'override_subscription_id' => $override->id,
-                'months' => $validated['months'],
-                'reason' => $validated['reason'],
-            ]
-        );
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Tenant access granted successfully.',
-            'reason' => $validated['reason'],
-            'data' => $this->subscriptionPayload($override),
-        ]);
-    }
-
-    private function requireSuperAdmin(Request $request): Admin
-    {
-        $admin = $request->user();
-
-        abort_unless(
-            $admin instanceof Admin
-            && $admin->role === 'super_admin'
-            && $admin->status === 'active',
-            403,
-            'An active Super Admin account is required.'
-        );
-
-        return $admin;
-    }
-
-    private function subscriptionPayload(
-        TenantSubscription $subscription
-    ): array {
-        $subscription->loadMissing('company');
-
-        return [
-            'id' => $subscription->id,
-
-            'company' =>
-                $subscription->company
-                    ? [
-                        'id' =>
-                            $subscription->company->id,
-
-                        'name' =>
-                            $subscription->company->name,
-
-                        'email' =>
-                            $subscription->company->email,
-
-                        'phone' =>
-                            $subscription->company->phone,
-                    ]
-                    : null,
-
-            'months' =>
-                $subscription->months,
-
-            'amount' =>
-                (float) $subscription->amount,
-
-            'currency' =>
-                $subscription->currency,
-
-            'reference' =>
-                $subscription->reference,
-
-            'status' =>
-                $subscription->status,
-
-            'display_status' =>
-                $this->displayStatus(
-                    $subscription
-                ),
-
-            'starts_at' =>
-                $subscription->starts_at,
-
-            'expires_at' =>
-                $subscription->expires_at,
-
-            'paid_at' =>
-                $subscription->paid_at,
-
-            'created_at' =>
-                $subscription->created_at,
-        ];
-    }
-
-    private function displayStatus(
-        TenantSubscription $subscription
-    ): string {
-        if ($subscription->status === 'paid') {
-            if (
-                $subscription->expires_at
-                &&
-                $subscription->expires_at->isFuture()
-            ) {
-                return 'active';
-            }
-
-            return 'expired';
-        }
-
-        return $subscription->status;
     }
 }
