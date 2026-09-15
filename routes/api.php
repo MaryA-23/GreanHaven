@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminAccountController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\AdminCustomerController;
+use App\Http\Controllers\Admin\AdminContactMessageController;
 use App\Http\Controllers\Admin\AdminNotificationController;
 use App\Http\Controllers\Admin\AdminTenantController;
 use App\Http\Controllers\Admin\AdminTenantSubscriptionController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\DashboardController;
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ContactMessageController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\TenantAuthController;
 use App\Http\Controllers\Api\TenantDashboardController;
@@ -389,6 +391,18 @@ Route::prefix(
             ]
         );
     });
+
+
+/*
+|--------------------------------------------------------------------------
+| Public Contact
+|--------------------------------------------------------------------------
+*/
+
+Route::post(
+    '/contact',
+    [ContactMessageController::class, 'store']
+)->middleware('throttle:5,1');
 
 
 /*
@@ -1033,6 +1047,38 @@ Route::prefix(
                 'destroy'
             ]
         );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Contact Messages
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get(
+            '/contact-messages',
+            [AdminContactMessageController::class, 'index']
+        );
+
+        Route::get(
+            '/contact-messages/{id}',
+            [AdminContactMessageController::class, 'show']
+        )->whereNumber('id');
+
+        Route::patch(
+            '/contact-messages/{id}/read',
+            [AdminContactMessageController::class, 'markAsRead']
+        )->whereNumber('id');
+
+        Route::patch(
+            '/contact-messages/{id}/resolved',
+            [AdminContactMessageController::class, 'markAsResolved']
+        )->whereNumber('id');
+
+        Route::delete(
+            '/contact-messages/{id}',
+            [AdminContactMessageController::class, 'destroy']
+        )->whereNumber('id');
 
 
         /*
