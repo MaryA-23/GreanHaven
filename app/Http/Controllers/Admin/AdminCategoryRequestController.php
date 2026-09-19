@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\CategoryRequest;
+use App\Models\TenantNotification;
 use Illuminate\Http\Request;
 
 class AdminCategoryRequestController extends Controller
@@ -47,6 +48,25 @@ class AdminCategoryRequestController extends Controller
             'status' => 'approved',
         ]);
 
+        /*
+        |--------------------------------------------------------------------------
+        | Notify Tenant
+        |--------------------------------------------------------------------------
+        */
+
+        TenantNotification::create([
+            'company_id' => $categoryRequest->company_id,
+            'type' => 'category_request_approved',
+            'title' => 'Category Request Approved',
+            'message' => 'Your request for the category "'
+                . $categoryRequest->name
+                . '" has been approved.',
+            'action_url' => '/tenant/category-requests',
+            'reference_id' => $categoryRequest->id,
+            'is_read' => false,
+            'read_at' => null,
+        ]);
+
         return response()->json([
             'message' => 'Category request approved successfully.',
             'request' => $categoryRequest->load('company:id,name,email'),
@@ -65,6 +85,25 @@ class AdminCategoryRequestController extends Controller
 
         $categoryRequest->update([
             'status' => 'rejected',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Notify Tenant
+        |--------------------------------------------------------------------------
+        */
+
+        TenantNotification::create([
+            'company_id' => $categoryRequest->company_id,
+            'type' => 'category_request_rejected',
+            'title' => 'Category Request Rejected',
+            'message' => 'Your request for the category "'
+                . $categoryRequest->name
+                . '" has been rejected.',
+            'action_url' => '/tenant/category-requests',
+            'reference_id' => $categoryRequest->id,
+            'is_read' => false,
+            'read_at' => null,
         ]);
 
         return response()->json([
