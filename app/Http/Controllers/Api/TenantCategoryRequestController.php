@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdminNotification;
 use App\Models\Category;
 use App\Models\CategoryRequest;
 use Illuminate\Http\Request;
@@ -29,7 +30,9 @@ class TenantCategoryRequestController extends Controller
 
     public function store(Request $request)
     {
-        $companyId = $request->user()->company_id;
+        $user = $request->user();
+
+        $companyId = $user->company_id;
 
         if (!$companyId) {
             return response()->json([
@@ -54,9 +57,11 @@ class TenantCategoryRequestController extends Controller
             ],
         ]);
 
+        $categoryName = trim($validated['name']);
+
         $categoryExists = Category::whereRaw(
             'LOWER(name) = ?',
-            [strtolower(trim($validated['name']))]
+            [strtolower($categoryName)]
         )->exists();
 
         if ($categoryExists) {
@@ -67,9 +72,29 @@ class TenantCategoryRequestController extends Controller
 
         $categoryRequest = CategoryRequest::create([
             'company_id' => $companyId,
-            'name' => trim($validated['name']),
+            'name' => $categoryName,
             'description' => $validated['description'] ?? null,
             'status' => 'pending',
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Notify Super Admin
+        |--------------------------------------------------------------------------
+        */
+
+        $companyName = $user->company?->name ?? 'A tenant';
+
+        AdminNotification::create([
+            'type' => 'category_request',
+            'title' => 'New Category Request',
+            'message' => $companyName
+                . ' requested a new category: '
+                . $categoryName . '.',
+            'action_url' => '/super-admin/category-requests',
+            'reference_id' => $categoryRequest->id,
+            'is_read' => false,
+            'read_at' => null,
         ]);
 
         return response()->json([
