@@ -27,6 +27,8 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TenantNotificationController;
 use App\Http\Controllers\TenantSettingsController;
+use App\Http\Controllers\Api\TenantCategoryRequestController;
+use App\Http\Controllers\Admin\AdminCategoryRequestController;
 
 use Illuminate\Support\Facades\Route;
 
@@ -297,6 +299,21 @@ Route::prefix(
             ]
         );
 
+        /*
+        |--------------------------------------------------------------------------
+        | Category Requests
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get(
+            '/category-requests',
+            [TenantCategoryRequestController::class, 'index']
+        );
+
+        Route::post(
+            '/category-requests',
+            [TenantCategoryRequestController::class, 'store']
+        );
 
         /*
         |--------------------------------------------------------------------------
@@ -1171,6 +1188,31 @@ Route::prefix(
             ]
         );
 
+        /*
+        |--------------------------------------------------------------------------
+        | Category Requests
+        |--------------------------------------------------------------------------
+        */
+
+        Route::get(
+            '/category-requests',
+            [AdminCategoryRequestController::class, 'index']
+        );
+
+        Route::get(
+            '/category-requests/{id}',
+            [AdminCategoryRequestController::class, 'show']
+        )->whereNumber('id');
+
+        Route::patch(
+            '/category-requests/{id}/approve',
+            [AdminCategoryRequestController::class, 'approve']
+        )->whereNumber('id');
+
+        Route::patch(
+            '/category-requests/{id}/reject',
+            [AdminCategoryRequestController::class, 'reject']
+        )->whereNumber('id');
 
         /*
         |--------------------------------------------------------------------------

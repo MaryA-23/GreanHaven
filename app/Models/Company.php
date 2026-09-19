@@ -53,6 +53,10 @@ class Company extends Model
     {
         return $this->hasMany(TenantSubscription::class);
     }
+    public function categoryRequests()
+    {
+        return $this->hasMany(CategoryRequest::class);
+    }
 
     public function activeSubscription()
     {
